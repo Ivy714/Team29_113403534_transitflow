@@ -24,12 +24,7 @@ except Exception:
 # ── Core Query Functions ──────────────────────────────────────────────────────
 
 @lru_cache(maxsize=128)
-def query_shortest_route(
-    origin_id: str,
-    destination_id: str,
-    network: str = "auto",
-) -> Dict[str, Any]:
-
+def query_shortest_route(origin_id: str, destination_id: str) -> Dict[str, Any]:
     """使用最短路徑演算法計算兩站間時間最優解"""
     if not _driver: return {"error": "Driver uninitialized."}
 
@@ -58,39 +53,6 @@ def query_shortest_route(
             }
     except Exception as e:
         return {"error": str(e)}
-        
-def query_cheapest_route(
-    origin_id: str,
-    destination_id: str,
-    network: str = "auto",
-) -> Dict[str, Any]:
-    return query_shortest_route(origin_id, destination_id, network)
-
-
-def query_interchange_path(
-    origin_id: str,
-    destination_id: str,
-) -> Dict[str, Any]:
-    return query_shortest_route(origin_id, destination_id)
-
-
-def query_alternative_routes(
-    origin_id: str,
-    destination_id: str,
-    avoid_station_id: str,
-    network: str = "auto",
-) -> List[Dict[str, Any]]:
-    result = query_shortest_route(origin_id, destination_id, network)
-
-    if isinstance(result, dict) and result.get("error"):
-        return [result]
-
-    if isinstance(result, dict):
-        result["avoid_station_id"] = avoid_station_id
-        result["route_type"] = "alternative_placeholder"
-        return [result]
-
-    return []
 
 def query_delay_ripple(station_id: str, depth: int = 2) -> List[Dict[str, Any]]:
     """查詢特定車站延誤時，波及影響的鄰近車站"""
