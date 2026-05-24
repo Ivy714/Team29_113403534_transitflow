@@ -1,10 +1,10 @@
 """
-TransitFlow — Intelligent Agent (Full Business Logic Edition)
+TransitFlow — Intelligent Agent (Final Production Version)
 =============================================================
-升級功能：
-1. 自動隱藏系統警告
-2. 支援兒童半價邏輯 (含關鍵字彈性比對)
-3. 支援退款與規則查詢分流
+功能說明：
+1. 隱藏系統環境警告
+2. 完整商業邏輯 (兒童半價計算)
+3. 意圖感知分流 (導航、退款政策、行李規定)
 """
 
 import warnings
@@ -36,7 +36,7 @@ def _format_route_result(data, mode="time", passenger_type="adult") -> str:
     if not data or not data.get("found"):
         return "經查，目前兩站之間沒有可行路線。"
     
-    # 邏輯升級：計算票價
+    # 邏輯：根據身份計算票價
     final_cost = float(data.get("total_cost", 0))
     if passenger_type == "child":
         final_cost = final_cost * 0.5
@@ -56,9 +56,13 @@ def _format_route_result(data, mode="time", passenger_type="adult") -> str:
     return "\n".join(lines)
 
 def run_agent(user_message: str, history: list[dict]) -> tuple:
-    # 1. 意圖檢測：退款/規則查詢
-    if any(k in user_message for k in ["退款", "規則", "行李", "政策"]):
-        reply = "有關退款與營運政策，請參閱我們的線上規則手冊 (RF001-RF005)。請問您想查詢特定的條款嗎？"
+    # 1. 意圖檢測：分流處理政策與規定
+    if any(k in user_message for k in ["退款", "政策"]):
+        reply = "關於退款，請參閱規則 RF001 (一般退款) 至 RF003 (特殊狀況)。請問您需要哪一項的詳細說明嗎？"
+        return reply, history + [{"role": "user", "content": user_message}, {"role": "assistant", "content": reply}]
+    
+    if any(k in user_message for k in ["行李", "攜帶"]):
+        reply = "根據行李攜帶政策 (RF005)，每位乘客限帶兩件行李，總重量不得超過 20 公斤。需要查詢其他限制嗎？"
         return reply, history + [{"role": "user", "content": user_message}, {"role": "assistant", "content": reply}]
 
     # 2. 導航與計價查詢
@@ -66,7 +70,6 @@ def run_agent(user_message: str, history: list[dict]) -> tuple:
     _ids = re.findall(r'\b(MS\d{2}|NR\d{2})\b', _augmented, re.IGNORECASE)
     
     if len(_ids) >= 2:
-        # 彈性判定便宜查詢與乘客類型
         optimise = "cost" if any(k in user_message for k in ["便宜", "最省", "價格", "多少錢"]) else "time"
         is_child = any(k in user_message for k in ["兒童", "小孩", "小朋友"])
         passenger = "child" if is_child else "adult"
