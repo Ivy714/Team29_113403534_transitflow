@@ -2,7 +2,10 @@
   {
     "ticket_type": "single",
     "display_name": "Single Ticket",
-    "available_on": ["metro", "national_rail"],
+    "available_on": [
+      "metro",
+      "national_rail"
+    ],
     "description": "A one-way ticket for a single journey between an origin and destination station. Valid on the selected travel date only.",
     "metro": {
       "pricing_model": "stops_based",
@@ -13,65 +16,103 @@
       "validity": "Travel date only. Ticket expires at midnight on the travel date.",
       "advance_purchase": false,
       "changes_allowed": false,
-      "refundable": true,
-      "refund_rule": "RF003"
+      "refundable": "conditional_before_activation",
+      "refund_rule": "RF003",
+      "refund_condition": "Refundable only before first tap-in or journey commencement under RF003."
     },
     "national_rail": {
       "pricing_model": "stops_based_with_fare_class",
       "formula": "amount = base_fare_usd + (stops_travelled × per_stop_rate_usd), rates vary by fare_class and service_type",
-      "fare_classes": ["standard", "first"],
+      "fare_classes": [
+        "standard",
+        "first"
+      ],
       "seat_assignment": true,
       "validity": "Selected travel date and scheduled service only. Not valid on a different service without a change fee.",
       "advance_purchase": true,
       "advance_purchase_max_days": 90,
       "changes_allowed": true,
-      "change_fee_usd": 1.00,
+      "change_fee_usd": 1.0,
       "change_deadline": "At least 24 hours before scheduled departure",
-      "refundable": true,
-      "refund_rule": "RF001 (normal service), RF002 (express service)"
+      "refundable": "conditional",
+      "refund_rule": "RF001 (normal service), RF002 (express service)",
+      "refund_condition": "Refundable according to RF001 or RF002 cancellation windows, or under disruption/payment-error policies when applicable."
+    },
+    "usage_rules": {
+      "qr_code_use": "Each single ticket QR code may be used for one completed journey only.",
+      "same_day_only": "Metro single tickets expire at 23:59 on the travel date. National rail single tickets are valid only for the booked service unless changed under booking rules.",
+      "interchange": "Changing between metro and national rail requires a valid ticket for each network unless the passenger has separately purchased both tickets."
     }
   },
   {
     "ticket_type": "return",
     "display_name": "Return Ticket",
-    "available_on": ["national_rail"],
+    "available_on": [
+      "national_rail"
+    ],
     "description": "A two-leg ticket covering an outbound journey and a return journey on the same route. Each leg is priced and treated independently.",
     "national_rail": {
       "pricing_model": "stops_based_per_leg",
       "formula": "total amount = outbound_fare + return_fare (each leg calculated separately using stops-based pricing for the booked fare class)",
-      "fare_classes": ["standard", "first"],
+      "fare_classes": [
+        "standard",
+        "first"
+      ],
       "seat_assignment": true,
       "outbound_validity": "Selected outbound travel date and scheduled service.",
       "return_validity": "Any scheduled service on the same route within 30 days of the outbound travel date.",
       "advance_purchase": true,
       "advance_purchase_max_days": 90,
       "changes_allowed": true,
-      "change_fee_usd": 1.00,
+      "change_fee_usd": 1.0,
       "change_deadline": "At least 24 hours before the leg being changed",
-      "refundable": true,
+      "refundable": "conditional",
       "refund_rule": "RF001 (normal service), RF002 (express service). Each leg is assessed separately.",
-      "notes": "If the outbound leg has already been travelled, only the return leg is eligible for cancellation and refund."
+      "notes": "If the outbound leg has already been travelled, only the return leg is eligible for cancellation and refund.",
+      "refund_condition": "Each leg is assessed separately under RF001 or RF002. After the outbound leg is completed, only the unused return leg may be refunded or changed.",
+      "general_validity_exception": "The return leg is an exception to the general same-service validity rule: it may be used on any scheduled service on the same route within 30 days of the outbound travel date, subject to the return usage rules."
+    },
+    "usage_rules": {
+      "outbound_and_return": "A return ticket contains two journey legs. The return leg may only be travelled after the outbound leg has been completed unless customer service authorises an exception during disruptions.",
+      "partial_use": "Refunds and changes are assessed per leg. A passenger may cancel an unused leg if it meets the relevant deadline and policy conditions.",
+      "same_route_only": "The return leg must use the same origin and destination pair in reverse direction."
     }
   },
   {
     "ticket_type": "day_pass",
     "display_name": "Metro Day Pass",
-    "available_on": ["metro"],
+    "available_on": [
+      "metro"
+    ],
     "description": "Unlimited travel on all metro lines (M1, M2, M3, M4) for one full calendar day. Not valid on national rail services.",
     "metro": {
       "pricing_model": "flat_rate",
-      "price_usd": 5.00,
+      "price_usd": 5.0,
       "fare_class": null,
       "seat_assignment": false,
       "unlimited_journeys": true,
-      "valid_lines": ["M1", "M2", "M3", "M4"],
+      "valid_lines": [
+        "M1",
+        "M2",
+        "M3",
+        "M4"
+      ],
       "validity": "Calendar day of purchase from 00:00 to 23:59. Cannot be used on a different date.",
       "advance_purchase": false,
       "changes_allowed": false,
       "transferable": false,
-      "refundable": true,
+      "refundable": "conditional_before_activation",
       "refund_rule": "RF004",
-      "notes": "A day pass offers better value than individual single tickets for passengers making 3 or more metro trips in a day. Tap in and out normally at each station."
+      "notes": "A day pass offers better value than individual single tickets for passengers making 3 or more metro trips in a day. Tap in and out normally at each station.",
+      "refund_condition": "Refundable only before first tap-in under RF004, except when disruption or natural disaster policies apply."
+    },
+    "usage_rules": {
+      "activation": "A metro day pass is activated at the first tap-in on the purchase date.",
+      "unlimited_use": "After activation, the passenger may make unlimited metro journeys until 23:59 on the same calendar day.",
+      "not_valid_on_national_rail": "Metro day passes cannot be used on national rail services, even at interchange stations.",
+      "single_user_only": "A day pass is non-transferable and may only be used by the passenger who purchased it.",
+      "carry_over": "Unused validity does not carry over to the next calendar day regardless of activation time.",
+      "partial_refund_limit": "Once activated, a metro day pass is not normally eligible for partial refund because unlimited usage makes the unused portion non-identifiable; natural-disaster exceptions are handled under RF009."
     }
   }
 ]
