@@ -5,7 +5,10 @@
     "applies_to": {
       "network_type": "national_rail",
       "service_type": "normal",
-      "ticket_types": ["single", "return"]
+      "ticket_types": [
+        "single",
+        "return"
+      ]
     },
     "cancellation_windows": [
       {
@@ -15,7 +18,7 @@
         "hours_before_departure_min": 48,
         "hours_before_departure_max": null,
         "refund_percent": 100,
-        "admin_fee_usd": 0.00
+        "admin_fee_usd": 0.0
       },
       {
         "window_id": "RF001_W2",
@@ -24,7 +27,7 @@
         "hours_before_departure_min": 24,
         "hours_before_departure_max": 48,
         "refund_percent": 75,
-        "admin_fee_usd": 0.50
+        "admin_fee_usd": 0.5
       },
       {
         "window_id": "RF001_W3",
@@ -33,7 +36,7 @@
         "hours_before_departure_min": 2,
         "hours_before_departure_max": 24,
         "refund_percent": 50,
-        "admin_fee_usd": 0.50
+        "admin_fee_usd": 0.5
       },
       {
         "window_id": "RF001_W4",
@@ -42,7 +45,7 @@
         "hours_before_departure_min": 0,
         "hours_before_departure_max": 2,
         "refund_percent": 0,
-        "admin_fee_usd": 0.00
+        "admin_fee_usd": 0.0
       }
     ],
     "return_ticket_notes": "For return tickets, each leg is assessed independently. If the outbound leg has already been travelled, only the return leg amount is eligible for refund, assessed against the return departure time.",
@@ -54,7 +57,10 @@
     "applies_to": {
       "network_type": "national_rail",
       "service_type": "express",
-      "ticket_types": ["single", "return"]
+      "ticket_types": [
+        "single",
+        "return"
+      ]
     },
     "cancellation_windows": [
       {
@@ -64,7 +70,7 @@
         "hours_before_departure_min": 48,
         "hours_before_departure_max": null,
         "refund_percent": 100,
-        "admin_fee_usd": 1.00
+        "admin_fee_usd": 1.0
       },
       {
         "window_id": "RF002_W2",
@@ -73,7 +79,7 @@
         "hours_before_departure_min": 24,
         "hours_before_departure_max": 48,
         "refund_percent": 50,
-        "admin_fee_usd": 1.00
+        "admin_fee_usd": 1.0
       },
       {
         "window_id": "RF002_W3",
@@ -82,7 +88,7 @@
         "hours_before_departure_min": 0,
         "hours_before_departure_max": 24,
         "refund_percent": 0,
-        "admin_fee_usd": 0.00
+        "admin_fee_usd": 0.0
       }
     ],
     "return_ticket_notes": "Same as normal service: each leg assessed independently against its own departure time.",
@@ -93,7 +99,9 @@
     "label": "Metro – Single Ticket",
     "applies_to": {
       "network_type": "metro",
-      "ticket_types": ["single"]
+      "ticket_types": [
+        "single"
+      ]
     },
     "cancellation_windows": [
       {
@@ -102,7 +110,7 @@
         "condition": "Cancellation requested before the passenger has tapped in at the origin station",
         "status_condition": "Booking status is 'confirmed' and journey has not commenced",
         "refund_percent": 100,
-        "admin_fee_usd": 0.00
+        "admin_fee_usd": 0.0
       },
       {
         "window_id": "RF003_W2",
@@ -110,7 +118,7 @@
         "condition": "Journey has already commenced (passenger has tapped in)",
         "status_condition": "Booking status is 'completed' or travelled_at is not null",
         "refund_percent": 0,
-        "admin_fee_usd": 0.00
+        "admin_fee_usd": 0.0
       }
     ],
     "notes": "Metro single tickets are valid on the travel date only. A booking with status 'cancelled' is already cancelled and no further refund action is needed."
@@ -120,7 +128,9 @@
     "label": "Metro – Day Pass",
     "applies_to": {
       "network_type": "metro",
-      "ticket_types": ["day_pass"]
+      "ticket_types": [
+        "day_pass"
+      ]
     },
     "cancellation_windows": [
       {
@@ -129,7 +139,7 @@
         "condition": "Cancellation requested before the passenger has made their first tap-in on the travel date",
         "status_condition": "Booking status is 'confirmed' and travelled_at is null",
         "refund_percent": 100,
-        "admin_fee_usd": 0.00
+        "admin_fee_usd": 0.0
       },
       {
         "window_id": "RF004_W2",
@@ -137,7 +147,7 @@
         "condition": "Day pass has been activated (first tap-in recorded)",
         "status_condition": "Booking status is 'completed' or travelled_at is not null",
         "refund_percent": 0,
-        "admin_fee_usd": 0.00
+        "admin_fee_usd": 0.0
       }
     ],
     "notes": "Day passes are non-transferable and valid only for the calendar day of purchase."
@@ -147,7 +157,11 @@
     "label": "Delay Compensation – All Networks",
     "applies_to": {
       "network_type": "all",
-      "ticket_types": ["single", "return", "day_pass"]
+      "ticket_types": [
+        "single",
+        "return",
+        "day_pass"
+      ]
     },
     "compensation_rules": [
       {
@@ -169,6 +183,176 @@
         "how_to_claim": "Submit claim with receipts via customer service within 28 days of travel date"
       }
     ],
-    "exclusions": "Delays caused by third-party events (extreme weather, security incidents, government directives, or passenger-caused incidents) are not eligible for compensation."
+    "exclusions": "Delays caused by third-party events (extreme weather, security incidents, government directives, or passenger-caused incidents) are not eligible for compensation.",
+    "operator_fault_definition": [
+      "Mechanical failure of operator equipment",
+      "Signalling or dispatching issue within operator control",
+      "Staffing or operational error caused by the operator",
+      "Train or metro service removed from operation for operator-controlled maintenance reasons"
+    ],
+    "non_operator_fault_examples": [
+      "Extreme weather or natural disaster",
+      "Security incident or police activity",
+      "Government directive or emergency order",
+      "Passenger-caused incident or medical emergency on board"
+    ],
+    "clarification": "This exclusion applies only to delay compensation claims. Refund and rebooking eligibility for extreme weather or natural disaster events is handled separately under RF009."
+  },
+  {
+    "policy_id": "RF006",
+    "label": "Service Cancellation or Major Disruption – All Networks",
+    "applies_to": {
+      "network_type": "all",
+      "ticket_types": [
+        "single",
+        "return",
+        "day_pass"
+      ]
+    },
+    "eligibility": [
+      {
+        "rule_id": "RF006_R1",
+        "condition": "Scheduled service is cancelled by the operator before departure",
+        "refund_percent": 100,
+        "admin_fee_usd": 0.0,
+        "notes": "Passenger may choose either a full refund or rebooking onto the next available equivalent service at no extra charge, subject to seat availability."
+      },
+      {
+        "rule_id": "RF006_R2",
+        "condition": "Passenger cannot complete the journey due to operator-caused line suspension or station closure",
+        "refund_percent": 100,
+        "admin_fee_usd": 0.0,
+        "notes": "Applies only when no reasonable alternative route is provided within 60 minutes."
+      },
+      {
+        "rule_id": "RF006_R3",
+        "condition": "Metro day pass purchased but no journey has been made before a full-day metro network suspension",
+        "refund_percent": 100,
+        "admin_fee_usd": 0.0,
+        "notes": "If the day pass has already been used, normal delay compensation under RF005 may apply only when the disruption is due to operator fault; natural disaster cases are handled under RF009."
+      }
+    ],
+    "claim_deadline_days": 28,
+    "rebooking_conditions": "Free rebooking applies only to the same route, same network, and equivalent fare class, subject to seat availability. Different routes, upgrades, or ticket-type changes require customer service approval.",
+    "relationship_to_RF009": "If the cancellation or disruption is caused by extreme weather or a natural disaster, RF009 takes precedence over RF006. RF006 applies to operator-caused cancellations or disruptions that are not natural-disaster events."
+  },
+  {
+    "policy_id": "RF007",
+    "label": "Payment Error or Duplicate Charge – All Networks",
+    "applies_to": {
+      "network_type": "all",
+      "ticket_types": [
+        "single",
+        "return",
+        "day_pass"
+      ]
+    },
+    "eligibility": [
+      {
+        "rule_id": "RF007_R1",
+        "condition": "Passenger was charged more than once for the same booking or metro trip",
+        "refund_percent": 100,
+        "admin_fee_usd": 0.0,
+        "notes": "Only the duplicate or excess payment amount is refunded. The valid ticket remains active."
+      },
+      {
+        "rule_id": "RF007_R2",
+        "condition": "Payment was taken but no booking, ticket, or QR code was issued",
+        "refund_percent": 100,
+        "admin_fee_usd": 0.0,
+        "notes": "Passenger may request either a full refund or manual ticket reissue after payment verification."
+      }
+    ],
+    "processing_time": "Refunds are processed within 5 business days after verification. Actual posting time may vary depending on the passenger's bank or payment provider."
+  },
+  {
+    "policy_id": "RF008",
+    "label": "Seat Selection Fee Refund – National Rail",
+    "applies_to": {
+      "network_type": "national_rail",
+      "ticket_types": [
+        "single",
+        "return"
+      ]
+    },
+    "eligibility": [
+      {
+        "rule_id": "RF008_R1",
+        "condition": "Passenger cancels a standard class booking and the fare is eligible for refund under RF001 or RF002",
+        "refund": "Seat selection fee is refunded in the same percentage as the fare refund."
+      },
+      {
+        "rule_id": "RF008_R2",
+        "condition": "Operator changes the passenger's selected seat for operational reasons",
+        "refund": "Seat selection fee is refunded in full."
+      }
+    ],
+    "exclusions": "Seat selection fee is not refunded when the passenger voluntarily changes seat preference after booking."
+  },
+  {
+    "policy_id": "RF009",
+    "label": "Extreme Weather and Natural Disaster Disruption – All Networks",
+    "applies_to": {
+      "network_type": "all",
+      "ticket_types": [
+        "single",
+        "return",
+        "day_pass"
+      ]
+    },
+    "disruption_events": [
+      {
+        "event_type": "extreme_weather_or_natural_disaster",
+        "examples": [
+          "Typhoon",
+          "Flooding",
+          "Severe thunderstorm",
+          "Earthquake",
+          "Landslide"
+        ],
+        "definition": "Events outside operator control that may affect safe railway or metro operations."
+      }
+    ],
+    "eligibility_rules": [
+      {
+        "rule_id": "RF009_R1",
+        "condition": "Service cancelled before departure due to natural disaster or severe weather",
+        "refund_percent": 100,
+        "admin_fee_usd": 0.0,
+        "alternative_option": "Passenger may choose a full refund or free rebooking within 7 days of the original travel date. Rebooking must be for an equivalent route and fare class unless customer service authorises an exception."
+      },
+      {
+        "rule_id": "RF009_R2",
+        "condition": "Passenger chooses not to travel after an official government severe weather warning is issued",
+        "refund_percent": 100,
+        "admin_fee_usd": 0.0,
+        "requirements": "Applies only to journeys scheduled within the official warning period."
+      },
+      {
+        "rule_id": "RF009_R3",
+        "condition": "Journey already commenced before service suspension",
+        "refund_percent": 50,
+        "admin_fee_usd": 0.0,
+        "notes": "Partial refund applies only to single or return tickets where the unused portion can be identified and no replacement transport is provided. Activated metro day passes are not eligible for partial refund unless customer service authorises an exception during a full-network emergency."
+      },
+      {
+        "rule_id": "RF009_R4",
+        "condition": "Metro day pass purchased but metro network suspended before first use",
+        "refund_percent": 100,
+        "admin_fee_usd": 0.0
+      }
+    ],
+    "compensation_policy": {
+      "delay_compensation": "Delay compensation under RF005 does not apply when delays or cancellations are caused by extreme weather or natural disasters outside operator control.",
+      "alternative_transport": "Taxi, rideshare, hotel, or accommodation expenses are not reimbursed unless explicitly approved by customer service during major emergencies."
+    },
+    "passenger_guidance": {
+      "service_updates": "Passengers should check the mobile app, station announcements, or customer service channels for live disruption updates.",
+      "safety_priority": "Service suspensions may occur without notice if operating conditions are unsafe."
+    },
+    "claim_deadline_days": 28,
+    "rebooking_conditions": "Free rebooking under RF009 is subject to seat availability and applies only to equivalent routes, equivalent fare classes, and the same passenger.",
+    "relationship_to_RF005": "RF009 covers refunds and rebooking for extreme weather or natural disasters. RF005 delay compensation does not apply to these events unless the delay is separately confirmed as operator fault.",
+    "precedence": "RF009 takes precedence over RF006 when the same cancellation or suspension is caused by extreme weather or natural disaster. RF005 delay compensation does not apply to RF009 events unless customer service explicitly authorises an exception."
   }
 ]

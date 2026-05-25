@@ -1,166 +1,89 @@
-"""
-TransitFlow — Neo4j Graph Database Layer
-=========================================
-This module handles all queries to Neo4j.
-
-GRAPH ROLE:
-  - Model the dual transit network (city metro M1–M4 + national rail NR1–NR2)
-  - Find fastest routes (Dijkstra by travel_time_min via APOC)
-  - Find cheapest routes (Dijkstra by fare via APOC)
-  - Find alternative routes avoiding a given station
-  - Find cross-network interchange paths (metro → rail or rail → metro)
-  - Show delay ripple: which stations are affected within N hops
-
-STUDENT TASK
-------------
-Design your graph schema (node labels, relationship types, properties)
-based on the data in train-mock-data/, seed it with skeleton/seed_neo4j.py,
-then implement the query_ functions below.
-
-Functions prefixed with `query_` are called by the agent (skeleton/agent.py).
-"""
-
-from __future__ import annotations
-
-from typing import Optional
-
 from neo4j import GraphDatabase
+from typing import Any, Dict, List
+import sys
+import os
 
-from skeleton.config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
+# 修正路徑以確保能正確匯入 skeleton 資料夾下的 config
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from skeleton import config as settings
 
-
-def _driver():
-    """Return a Neo4j driver. Caller is responsible for closing."""
-    return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-
-
-# ── Example ───────────────────────────────────────────────────────────────────
-# The block below shows the query pattern: open a session, run Cypher, return data.
-
-def example_count_nodes() -> int:
-    """Example: count all nodes currently in the graph."""
-    with _driver() as driver:
-        with driver.session() as session:
-            result = session.run("MATCH (n) RETURN count(n) AS total")
-            return result.single()["total"]
-
-# TODO: Implement the query_ functions below.
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-# ── FASTEST ROUTE (Dijkstra by travel_time_min) ───────────────────────────────
-
-def query_shortest_route(
-    origin_id: str,
-    destination_id: str,
-    network: str = "auto",
-) -> dict:
+class TransitQueryManager:
     """
-    Find the fastest path between two stations, minimising total travel time.
-    Uses apoc.algo.dijkstra (APOC required; enabled in docker-compose.yml).
-
-    Args:
-        origin_id:       e.g. "MS01" or "NR01"
-        destination_id:  e.g. "MS09" or "NR05"
-        network:         "metro", "rail", or "auto" (inferred from IDs)
-
-    Returns:
-        dict with keys: found, origin_id, destination_id,
-                        total_time_min, path (list of station dicts), legs
+    全面升級版 TransitQueryManager：
+    支援基礎票價、每站費率、轉乘路徑規劃與 Ripple Effect 漣漪效應分析。
     """
-    raise NotImplementedError("TODO: implement after designing your graph schema")
+    
+    def __init__(self):
+        try:
+            self.driver = GraphDatabase.driver(settings.NEO4J_URI, auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD))
+        except Exception as e:
+            print(f"Driver Initialization Failed: {e}")
+            self.driver = None
 
+    def close(self):
+        if self.driver: self.driver.close()
 
-# ── CHEAPEST ROUTE (Dijkstra by fare) ────────────────────────────────────────
+    def query_shortest_route(self, origin_id: str, destination_id: str) -> Dict[str, Any]:
+        """精準路徑規劃，累加時間並解析站點資訊"""
+        if not self.driver: return {"error": "Neo4j driver offline."}
 
-def query_cheapest_route(
-    origin_id: str,
-    destination_id: str,
-    network: str = "auto",
-    fare_class: str = "standard",
-) -> dict:
-    """
-    Find the cheapest path between two stations, minimising total estimated fare.
+        cypher_query = """
+        MATCH p = (start {station_id: $origin_id})-[:METRO_LINK|RAIL_LINK|INTERCHANGE_TO*..15]->(end {station_id: $destination_id})
+        WITH p, 
+             reduce(s = 0, r IN relationships(p) | s + coalesce(r.travel_time_min, r.walking_time_min, 0)) AS total_time
+        RETURN p, total_time
+        ORDER BY total_time ASC LIMIT 1
+        """
+        
+        with self.driver.session() as session:
+            record = session.run(cypher_query, origin_id=origin_id, destination_id=destination_id).single()
+            if not record: return {"found": False}
+            
+            path = record["p"]
+            stations_path = [{"station_id": n.get("station_id"), "name": n.get("name")} for n in path.nodes]
+            return {"found": True, "total_time_min": record["total_time"], "path": stations_path}
 
-    Args:
-        origin_id:       e.g. "NR01"
-        destination_id:  e.g. "NR05"
-        network:         "metro", "rail", or "auto"
-        fare_class:      "standard" or "first" (national rail only)
+    def query_cheapest_route(self, origin_id: str, destination_id: str) -> Dict[str, Any]:
+        """
+        全面升級版計價：結合起步價與路段費率。
+        邏輯：total = 起點的 base_fare + SUM(segment_cost)
+        """
+        if not self.driver: return {"error": "Neo4j driver offline."}
+        
+        cypher_query = """
+        MATCH p = (start {station_id: $origin_id})-[:METRO_LINK|RAIL_LINK|INTERCHANGE_TO*..15]->(end {station_id: $destination_id})
+        WITH p, start,
+             reduce(s = 0, r IN relationships(p) | s + coalesce(r.segment_cost, r.cost, 0)) AS total_segment_cost
+        RETURN p, (start.base_fare + total_segment_cost) AS total_cost
+        ORDER BY total_cost ASC LIMIT 1
+        """
+        with self.driver.session() as session:
+            record = session.run(cypher_query, origin_id=origin_id, destination_id=destination_id).single()
+            if not record: return {"found": False}
+            
+            # 解析路徑回傳
+            path = record["p"]
+            stations_path = [{"station_id": n.get("station_id"), "name": n.get("name")} for n in path.nodes]
+            return {
+                "found": True, 
+                "total_cost": round(record["total_cost"], 2), 
+                "path": stations_path
+            }
 
-    Returns:
-        dict with found, total_fare_usd (approximate), stations, legs
-    """
-    raise NotImplementedError("TODO: implement after designing your graph schema")
+    def query_delay_ripple(self, station_id: str, depth: int = 2) -> List[Dict[str, Any]]:
+        """分析漣漪效應，返回深度內所有受影響站點"""
+        if not self.driver: return []
+        
+        cypher_query = """
+        MATCH (s {station_id: $station_id})-[*1..2]-(affected)
+        WHERE affected.station_id <> $station_id
+        RETURN DISTINCT affected.station_id AS station_id, affected.name AS name, labels(affected)[0] AS type
+        """
+        with self.driver.session() as session:
+            return [record.data() for record in session.run(cypher_query, station_id=station_id)]
 
-
-# ── ALTERNATIVE ROUTES (avoiding a station) ───────────────────────────────────
-
-def query_alternative_routes(
-    origin_id: str,
-    destination_id: str,
-    avoid_station_id: str,
-    network: str = "auto",
-    max_routes: int = 3,
-) -> list[list[dict]]:
-    """
-    Find paths between two stations that avoid a specific intermediate station.
-    Useful for routing around a delayed or closed station.
-
-    Args:
-        origin_id:         e.g. "NR01"
-        destination_id:    e.g. "NR05"
-        avoid_station_id:  e.g. "NR03"
-        network:           "metro", "rail", or "auto"
-        max_routes:        max number of alternatives to return
-
-    Returns:
-        List of routes, each route is a list of leg dicts
-    """
-    raise NotImplementedError("TODO: implement after designing your graph schema")
-
-
-# ── CROSS-NETWORK INTERCHANGE PATH ───────────────────────────────────────────
-
-def query_interchange_path(origin_id: str, destination_id: str) -> dict:
-    """
-    Find a path between a metro station and a national rail station (or vice versa)
-    crossing the network boundary via interchange relationships.
-
-    Args:
-        origin_id:       e.g. "MS03" (metro) or "NR05" (national rail)
-        destination_id:  e.g. "NR05" (national rail) or "MS09" (metro)
-
-    Returns:
-        dict with found, stations list, interchange points, total_time_min
-    """
-    raise NotImplementedError("TODO: implement after designing your graph schema")
-
-
-# ── DELAY RIPPLE ANALYSIS ─────────────────────────────────────────────────────
-
-def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
-    """
-    Find all stations within N hops of a delayed or disrupted station.
-    Works on both metro and national rail networks.
-
-    Args:
-        delayed_station_id: e.g. "NR03" or "MS01"
-        hops:               how many connections out to search (default 2)
-
-    Returns:
-        List of dicts: {station_id, name, hops_away, lines_affected}
-    """
-    raise NotImplementedError("TODO: implement after designing your graph schema")
-
-
-# ── STATION CONNECTIONS ───────────────────────────────────────────────────────
-
-def query_station_connections(station_id: str) -> list[dict]:
-    """
-    List all direct connections from a given station.
-
-    Args:
-        station_id: e.g. "MS01" or "NR01"
-    """
-    raise NotImplementedError("TODO: implement after designing your graph schema")
+    def get_station_details(self, station_id: str) -> Dict[str, Any]:
+        """額外擴充：查詢單一車站所有政策與屬性"""
+        with self.driver.session() as session:
+            record = session.run("MATCH (s {station_id: $sid}) RETURN s", sid=station_id).single()
+            return dict(record["s"]) if record else {}

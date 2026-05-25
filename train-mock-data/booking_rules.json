@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "last_updated": "2024-01-01",
+  "last_updated": "2026-05-24",
   "national_rail": {
     "advance_booking": {
       "max_days_in_advance": 90,
@@ -10,28 +10,36 @@
     "seat_selection": {
       "first_class": {
         "included": true,
-        "fee_usd": 0.00,
+        "fee_usd": 0.0,
         "description": "Seat selection is included at no extra charge for all first class bookings."
       },
       "standard_class": {
         "included": false,
-        "fee_usd": 0.50,
+        "fee_usd": 0.5,
         "description": "Seat selection is optional for standard class. Passengers who do not select a seat will be assigned one at check-in, subject to availability.",
         "notes": "Window and aisle seats are subject to availability at the time of booking."
       }
     },
     "ticket_changes": {
       "allowed": true,
-      "change_fee_usd": 1.00,
+      "change_fee_usd": 1.0,
       "deadline": "Changes must be requested at least 24 hours before the scheduled departure of the service being changed.",
-      "what_can_be_changed": ["Travel date", "Scheduled service (same route)", "Seat selection"],
-      "what_cannot_be_changed": ["Route (origin/destination)", "Fare class (standard to first or vice versa)", "Ticket type (single to return or vice versa)"],
+      "what_can_be_changed": [
+        "Travel date",
+        "Scheduled service (same route)",
+        "Seat selection"
+      ],
+      "what_cannot_be_changed": [
+        "Route (origin/destination)",
+        "Fare class (standard to first or vice versa)",
+        "Ticket type (single to return or vice versa)"
+      ],
       "how_to_change": "Changes can be made via the app, website, or at a staffed ticket counter.",
       "express_service_note": "Ticket changes are not permitted for express service bookings within 24 hours of departure."
     },
     "child_fares": {
       "under_5": {
-        "fare_usd": 0.00,
+        "fare_usd": 0.0,
         "condition": "Children under 5 years of age travel free when accompanied by a fare-paying adult. No ticket required."
       },
       "age_5_to_15": {
@@ -51,7 +59,11 @@
       "not_applicable": "Group discount does not apply to first class tickets, express services, or day passes."
     },
     "payment": {
-      "accepted_methods": ["credit_card", "debit_card", "ewallet"],
+      "accepted_methods": [
+        "credit_card",
+        "debit_card",
+        "ewallet"
+      ],
       "payment_timing": "Full payment is required at the time of booking.",
       "currency": "USD"
     },
@@ -77,7 +89,7 @@
     },
     "child_fares": {
       "under_5": {
-        "fare_usd": 0.00,
+        "fare_usd": 0.0,
         "condition": "Children under 5 years of age travel free when accompanied by a fare-paying adult. No ticket required."
       },
       "age_5_to_15": {
@@ -94,7 +106,11 @@
       "description": "Group discounts are not available on metro services."
     },
     "payment": {
-      "accepted_methods": ["credit_card", "debit_card", "ewallet"],
+      "accepted_methods": [
+        "credit_card",
+        "debit_card",
+        "ewallet"
+      ],
       "payment_timing": "Full payment is required at the time of purchase.",
       "currency": "USD"
     },
@@ -106,10 +122,24 @@
   },
   "general_rules": {
     "valid_id": "Passengers may be asked to show a valid photo ID matching the name on the booking. Accepted IDs include national ID card, passport, and driving licence.",
-    "ticket_validity": "A ticket is only valid for the service, date, and passenger named on the booking. Tickets are non-transferable.",
+    "ticket_validity": "A ticket is only valid for the service, date, and passenger named on the booking, except for the return leg of a national rail return ticket, which follows the return validity rules defined in ticket_types.json. Tickets are non-transferable.",
     "fraud": "Use of another person's ticket, presentation of a counterfeit ticket, or deliberate fare evasion may result in a penalty fare, removal from the service, and/or legal action.",
     "lost_tickets": "Digital tickets can be retrieved via the app at any time using the booking reference. Passengers are advised to screenshot their QR code before travel in case of connectivity issues.",
     "customer_service": "Passengers with queries or complaints may contact customer service via the in-app chat, email, or station help desks. Response time is within 2 business days.",
-    "dispute_resolution": "If a passenger disagrees with a refund decision, they may escalate the case to the customer service team within 14 days of the original decision."
+    "dispute_resolution": "If a passenger disagrees with a refund decision, they may escalate the case to the customer service team within 14 days of the original decision.",
+    "account_eligibility": "Only active registered users may create bookings or purchase tickets through the app. Inactive users may view past bookings but cannot create new bookings until the account is reactivated.",
+    "payment_failures": "If payment fails, the booking or ticket is not confirmed and no seat is held. The passenger must retry payment or start a new booking.",
+    "duplicate_payment_handling": "If a passenger is charged more than once for the same booking reference, the duplicate payment is handled under refund policy RF007.",
+    "refund_processing_time": "Approved refunds are returned to the original payment method within 5 business days after verification. Actual posting time may vary depending on the passenger's bank or payment provider.",
+    "service_disruption_rebooking": "When a service is cancelled by the operator, passengers may rebook onto the next available equivalent service on the same route and same fare class at no extra charge, subject to seat availability.",
+    "natural_disaster_rebooking": "When service is cancelled due to extreme weather or natural disaster, passengers may request a full refund or free rebooking within 7 days of the original travel date under RF009. Rebooking is subject to seat availability and applies only to equivalent routes and fare classes unless customer service authorises an exception.",
+    "qr_code_security": "Passengers must not share ticket QR codes. If multiple passengers present the same QR code, only the first valid scan is accepted and later scans may be treated as invalid.",
+    "policy_precedence": "When general booking rules and a specific ticket, refund, disruption, or natural-disaster policy differ, the more specific policy takes precedence for that scenario."
+  },
+  "disruption_handling": {
+    "operator_cancelled_service": "Apply RF006 unless the cancellation is specifically caused by extreme weather or natural disaster, in which case RF009 applies.",
+    "station_closure": "If a station closure prevents travel and no reasonable alternative route is available within 60 minutes, RF006 applies.",
+    "extreme_weather_or_natural_disaster": "Apply RF009. Safety instructions from staff and official announcements take priority over normal service rules.",
+    "passenger_missed_service": "If the passenger misses a service for personal reasons, normal cancellation or no-show policies apply rather than RF006 or RF009."
   }
 }

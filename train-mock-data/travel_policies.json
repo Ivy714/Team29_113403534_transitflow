@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "last_updated": "2024-01-01",
+  "last_updated": "2026-05-24",
   "metro": {
     "bicycles": {
       "foldable_bicycles": {
@@ -9,7 +9,7 @@
         "peak_hour_restriction": true,
         "peak_hours": "07:00–09:30 and 17:00–20:00, Monday to Friday",
         "peak_hour_rule": "Foldable bicycles are NOT permitted during peak hours even if folded.",
-        "fee": 0.00,
+        "fee": 0.0,
         "placement": "Passenger is responsible for keeping the bicycle with them and must not block aisles or doors."
       },
       "standard_bicycles": {
@@ -32,7 +32,7 @@
       "permitted": true,
       "conditions": "Small pets in fully enclosed hard or soft carriers only.",
       "max_carrier_dimensions_cm": "50 × 35 × 25",
-      "fee": 0.00,
+      "fee": 0.0,
       "seat_occupancy": "Pets must not occupy a seat.",
       "exceptions": "Guide dogs and registered assistance animals are permitted at all times without a carrier.",
       "prohibited": "Dogs not in carriers are not permitted on the metro, including on leads."
@@ -56,14 +56,36 @@
       "Items emitting strong odours that may cause discomfort to other passengers"
     ],
     "smoking_and_vaping": "Strictly prohibited on all metro carriages, platforms, and station concourses.",
-    "noise": "Passengers are asked to keep noise to a considerate level. Use of personal audio devices with external speakers is not permitted."
+    "noise": "Passengers are asked to keep noise to a considerate level. Use of personal audio devices with external speakers is not permitted.",
+    "accessibility": {
+      "wheelchair_access": "Some metro stations provide step-free access. Passengers should check station accessibility information before travel; this policy does not confirm accessibility for a specific station unless station-level data is available.",
+      "assisted_boarding": "Passengers requiring assistance may ask station staff for help at staffed stations.",
+      "priority_boarding": "Passengers with mobility difficulties, elderly passengers, pregnant women, and passengers travelling with young children may board first where safe."
+    },
+    "station_closures": {
+      "planned_closures": "Planned station closures are announced in advance through the app and station notices.",
+      "unplanned_closures": "During unplanned station closures, passengers should follow staff instructions and use the nearest available alternative station where possible.",
+      "ticket_handling": "If a closure prevents travel and no reasonable alternative route is available within 60 minutes, refund policy RF006 applies."
+    },
+    "lost_property": {
+      "reporting": "Lost property should be reported through the app, station help desk, or customer service.",
+      "collection": "Passengers must provide a description of the item and proof of identity before collection.",
+      "retention_period_days": 30
+    },
+    "emergency_operations": {
+      "station_evacuation": "Passengers must follow staff instructions during emergencies or evacuations.",
+      "service_suspension": "Metro services may be suspended immediately if passenger safety is at risk.",
+      "restricted_access": "Stations, entrances, exits, or platforms may be temporarily closed during severe weather, crowding, security incidents, or other emergencies.",
+      "natural_disaster_response": "During typhoons, flooding, earthquakes, landslides, or severe thunderstorms, safety instructions and official service announcements take priority over normal travel plans. Refund and rebooking eligibility is handled under RF009.",
+      "refund_reference": "If the passenger cannot travel and no reasonable alternative route is available within 60 minutes, RF006 or RF009 may apply depending on the cause."
+    }
   },
   "national_rail": {
     "bicycles": {
       "foldable_bicycles": {
         "permitted": true,
         "peak_hour_restriction": false,
-        "fee": 0.00,
+        "fee": 0.0,
         "placement": "Must be stored in the overhead rack or in the space at the end of the carriage.",
         "max_folded_dimensions_cm": "90 × 45 × 30"
       },
@@ -73,7 +95,7 @@
         "peak_hour_restriction": true,
         "peak_hours": "07:00–09:30 and 16:30–19:00, Monday to Friday",
         "peak_hour_rule": "Standard bicycles are NOT permitted on national rail services during peak hours.",
-        "fee_usd": 2.00,
+        "fee_usd": 2.0,
         "booking": "Bicycle spaces are first-come-first-served and cannot be reserved in advance. Fee is payable at the platform bicycle bay gate.",
         "placement": "Bicycles must be placed in the designated bicycle bay. Passengers remain responsible for their bicycle."
       },
@@ -86,7 +108,7 @@
       "items_per_passenger": 3,
       "overhead_rack": "Items must fit in the overhead luggage rack above seats. No formal size restriction, but items must not cause inconvenience to other passengers.",
       "large_items": "Oversized items (e.g. large suitcases) should be placed in the dedicated luggage areas at the ends of each carriage.",
-      "storage_fee": 0.00,
+      "storage_fee": 0.0,
       "notes": "Passengers are responsible for their own luggage at all times. The operator is not liable for lost or damaged luggage."
     },
     "pets": {
@@ -94,13 +116,13 @@
       "other_dogs": {
         "permitted": true,
         "conditions": "Dogs must be on a lead at all times. Permitted in standard class coaches only.",
-        "fee": 0.00,
+        "fee": 0.0,
         "seat_occupancy": "Dogs must not occupy seats."
       },
       "small_animals_in_carriers": {
         "permitted": true,
         "conditions": "Small animals in enclosed carriers permitted in standard class. Not permitted in first class coaches.",
-        "fee": 0.00
+        "fee": 0.0
       },
       "large_animals": "Not permitted (except registered assistance animals)."
     },
@@ -132,6 +154,28 @@
       "Items emitting strong odours that may cause discomfort to other passengers"
     ],
     "smoking_and_vaping": "Strictly prohibited on all train carriages and at all station platforms.",
-    "conduct": "Passengers behaving in a manner that causes distress or danger to other passengers or staff may be removed from the train. In serious cases, the operator reserves the right to involve law enforcement."
+    "conduct": "Passengers behaving in a manner that causes distress or danger to other passengers or staff may be removed from the train. In serious cases, the operator reserves the right to involve law enforcement.",
+    "service_disruption": {
+      "cancelled_service": "If a national rail service is cancelled by the operator, passengers may request a refund under RF006 or rebook onto the next available equivalent service.",
+      "missed_connection_due_to_operator": "If a passenger misses a same-network connection due to an operator-caused delay, staff may assist with rebooking onto the next available service on the same route.",
+      "alternative_transport": "Alternative transport reimbursement is only available where stated in RF005, RF006, or RF009."
+    },
+    "lost_property": {
+      "reporting": "Lost property should be reported through the app, station help desk, or customer service.",
+      "collection": "Passengers must provide a description of the item and proof of identity before collection.",
+      "retention_period_days": 30
+    },
+    "emergency_operations": {
+      "station_evacuation": "Passengers must follow staff and platform announcements during emergencies or evacuations.",
+      "service_suspension": "National rail services may be suspended immediately if passenger safety or infrastructure safety is at risk.",
+      "restricted_access": "Stations, platforms, or specific coaches may be temporarily closed during severe weather, crowding, security incidents, or other emergencies.",
+      "natural_disaster_response": "During typhoons, flooding, earthquakes, landslides, or severe thunderstorms, safety instructions and official service announcements take priority over normal travel plans. Refund and rebooking eligibility is handled under RF009.",
+      "refund_reference": "If the passenger cannot travel due to operator cancellation or natural disaster disruption, RF006 or RF009 may apply."
+    }
+  },
+  "cross_network_notes": {
+    "peak_hour_restrictions": "Peak-hour restrictions may differ between metro and national rail because the two networks have different operating patterns and capacity limits.",
+    "separate_ticket_required": "Metro and national rail require separate valid tickets unless a passenger has separately purchased both network journeys.",
+    "policy_precedence": "Safety and emergency instructions override normal passenger conduct allowances during incidents."
   }
 }
