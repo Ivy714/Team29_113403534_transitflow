@@ -110,11 +110,12 @@ def query_national_rail_availability(
         -- origin must come before destination
         AND o_stop.stop_order < d_stop.stop_order
         LEFT JOIN (
-            SELECT schedule_id, COUNT(*) AS booked_seats
-            FROM bookings
-            WHERE travel_date = %s
-            AND status != 'cancelled'
-            GROUP BY schedule_id
+            SELECT b.schedule_id, COUNT(*) AS booked_seats
+            FROM bookings b
+            JOIN journeys j ON j.journey_id = b.booking_id
+            WHERE b.travel_date = %s
+            AND j.status != 'cancelled'
+            GROUP BY b.schedule_id
         ) booked ON booked.schedule_id = s.schedule_id
         ORDER BY s.line, s.service_type, s.first_train_time
     """
@@ -224,11 +225,12 @@ def query_available_seats(
         -- exclude seats already booked on this date
         AND NOT EXISTS (
             SELECT 1 FROM bookings b
+            JOIN journeys j ON j.journey_id = b.booking_id
             WHERE b.schedule_id  = sl.schedule_id
             AND   b.travel_date  = %s
             AND   b.coach        = s.coach
             AND   b.seat_id      = s.seat_id
-            AND   b.status      != 'cancelled'
+            AND   j.status      != 'cancelled'
         )
         ORDER BY s.coach, s.seat_row, s.seat_column
     """
@@ -482,9 +484,10 @@ def execute_booking(
             # 6. 確認座位未被訂走
             cur.execute(
                 """
-                SELECT 1 FROM bookings
-                WHERE schedule_id = %s AND travel_date = %s
-                AND coach = %s AND seat_id = %s AND status != 'cancelled'
+                SELECT 1 FROM bookings b
+                JOIN journeys j ON j.journey_id = b.booking_id
+                WHERE b.schedule_id = %s AND b.travel_date = %s
+                AND b.coach = %s AND b.seat_id = %s AND j.status != 'cancelled'
             """,
                 (schedule_id, travel_date, coach, seat_id),
             )

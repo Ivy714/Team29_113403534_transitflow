@@ -46,15 +46,23 @@ def chat(
     if not user_message.strip():
         return history_display, agent_history, gr.update()
 
-    answer, new_agent_history = run_agent(user_message, agent_history)
-    debug_text = ""
+    # 呼叫 Agent 並獲取 debug 資訊
+    answer, new_agent_history, debug_text = run_agent(
+        user_message, agent_history, debug=show_debug, current_user_email=current_user
+    )
 
     history_display = history_display + [
         {"role": "user", "content": user_message},
         {"role": "assistant", "content": answer},
     ]
 
-    debug_update = gr.update(value=debug_text, visible=show_debug)
+    # 設定 debug 面板顯示內容
+    debug_update = gr.update(
+        value=f"### 🔍 Database Debug Panel\n```text\n{debug_text}\n```"
+        if debug_text
+        else "",
+        visible=show_debug,
+    )
     return history_display, new_agent_history, debug_update
 
 
@@ -64,17 +72,27 @@ def clear_conversation():
 
 # ── Provider / model selection ────────────────────────────────────────────────
 
-_KNOWN_OLLAMA_MODELS = ["llama3.2:1b", "llama3.1:8b"]
+_KNOWN_OLLAMA_MODELS = ["llama3:latest", "llama3.2:1b", "llama3.1:8b"]
 
 
 def get_ollama_status():
     if llm.ollama_available():
         return "🟢 Ollama is running locally"
-    return (
-        "🔴 Ollama not detected — install from ollama.com and run `ollama pull "
-        + OLLAMA_CHAT_MODEL
-        + "`"
-    )
+    return "🔴 Ollama not detected — install from ollama.com"
+
+
+def get_chat_model_choices() -> list:
+    available = set(llm.get_available_ollama_models())
+    choices = []
+    for m in _KNOWN_OLLAMA_MODELS:
+        label = m if m in available else f"{m}  (not pulled)"
+        choices.append((label, m))
+    choices.append((f"☁️ Gemini ({GEMINI_CHAT_MODEL})", "gemini"))
+    return choices
+
+
+def get_initial_chat_model_value() -> str:
+    return "llama3:latest" 
 
 
 def get_chat_model_choices() -> list:
