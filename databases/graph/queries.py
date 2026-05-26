@@ -1,89 +1,533 @@
-from neo4j import GraphDatabase
-from typing import Any, Dict, List
-import sys
-import os
+"""
+TransitFlow — Neo4j Graph Database Layer
+=========================================
+Pathfinding and network analysis for the dual metro + national rail graph.
+"""
 
-# 修正路徑以確保能正確匯入 skeleton 資料夾下的 config
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from skeleton import config as settings
+from __future__ import annotations
+
+from typing import Any, Optional
+
+from neo4j import GraphDatabase
+from neo4j.graph import Node, Path
+
+from skeleton.config import (
+    INTERCHANGE_WALKING_TIME_MIN,
+    METRO_BASE_FARE_USD,
+    METRO_PER_STOP_RATE_USD,
+    NEO4J_PASSWORD,
+    NEO4J_URI,
+    NEO4J_USER,
+    RAIL_FIRST_BASE_FARE_USD,
+    RAIL_FIRST_PER_STOP_RATE_USD,
+    RAIL_STANDARD_BASE_FARE_USD,
+    RAIL_STANDARD_PER_STOP_RATE_USD,
+)
+
+try:
+    _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+    try:
+        _driver.verify_connectivity()
+    except Exception:
+        pass
+except Exception:
+    _driver = None
+
+
+def _session():
+    if not _driver:
+        raise RuntimeError("Neo4j driver is not initialized.")
+    return _driver.session()
+
+
+def _is_metro(station_id: str) -> bool:
+    return station_id.upper().startswith("MS")
+
+
+def _infer_network(
+    origin_id: str, destination_id: str, network: str
+) -> str:
+    if network in ("metro", "rail"):
+        return network
+    if _is_metro(origin_id) and _is_metro(destination_id):
+        return "metro"
+    if not _is_metro(origin_id) and not _is_metro(destination_id):
+        return "rail"
+    return "cross"
+
+
+def _rel_pattern(network: str) -> str:
+    if network == "metro":
+        return "METRO_LINK"
+    if network == "rail":
+        return "RAIL_LINK"
+    return "METRO_LINK|RAIL_LINK|INTERCHANGE_TO"
+
+
+def _node_label(station_id: str) -> str:
+    return "MetroStation" if _is_metro(station_id) else "NationalRailStation"
+
+
+def _station_dict(node: Node) -> dict[str, Any]:
+    labels = list(node.labels)
+    network = "metro" if "MetroStation" in labels else "rail"
+    lines = node.get("lines")
+    if lines is None and node.get("line"):
+        lines = [node.get("line")]
+    return {
+        "station_id": node.get("station_id"),
+        "name": node.get("name"),
+        "lines": list(lines or []),
+        "network": network,
+    }
+
+
+def _path_legs(path: Path) -> list[dict[str, Any]]:
+    nodes = list(path.nodes)
+    legs: list[dict[str, Any]] = []
+    for idx, rel in enumerate(path.relationships):
+        legs.append(
+            {
+                "from_station_id": nodes[idx].get("station_id"),
+                "to_station_id": nodes[idx + 1].get("station_id"),
+                "relationship": rel.type,
+                "line": rel.get("line"),
+                "travel_time_min": rel.get("time_weight"),
+            }
+        )
+    return legs
+
+
+def _path_time(path: Path) -> int:
+    return int(
+        sum(
+            rel.get("time_weight") or 0
+            for rel in path.relationships
+        )
+    )
+
+
+def _stops_fare(
+    station_ids: list[str],
+    fare_class: str = "standard",
+) -> float:
+    """Stops-based fare per ticket_types.json (separate ticket per network)."""
+    metro_ids = [sid for sid in station_ids if _is_metro(sid)]
+    rail_ids = [sid for sid in station_ids if not _is_metro(sid)]
+    total = 0.0
+
+    if metro_ids:
+        stops = max(0, len(metro_ids) - 1)
+        total += METRO_BASE_FARE_USD + stops * METRO_PER_STOP_RATE_USD
+
+    if rail_ids:
+        stops = max(0, len(rail_ids) - 1)
+        if fare_class == "first":
+            total += RAIL_FIRST_BASE_FARE_USD + stops * RAIL_FIRST_PER_STOP_RATE_USD
+        else:
+            total += RAIL_STANDARD_BASE_FARE_USD + stops * RAIL_STANDARD_PER_STOP_RATE_USD
+
+    return round(total, 2)
+
+
+def _find_shortest_path(
+    origin_id: str,
+    destination_id: str,
+    network: str,
+    avoid_station_id: Optional[str] = None,
+) -> Optional[Path]:
+    if not _driver:
+        return None
+
+    net = _infer_network(origin_id, destination_id, network)
+    rels = _rel_pattern(net)
+    start_label = _node_label(origin_id)
+    end_label = _node_label(destination_id)
+
+    avoid_clause = ""
+    params: dict[str, Any] = {
+        "origin_id": origin_id,
+        "destination_id": destination_id,
+    }
+    if avoid_station_id:
+        avoid_clause = "AND NONE(n IN nodes(p) WHERE n.station_id = $avoid_id)"
+        params["avoid_id"] = avoid_station_id
+
+    cypher = f"""
+    MATCH (start:{start_label} {{station_id: $origin_id}}),
+          (end:{end_label} {{station_id: $destination_id}})
+    MATCH p = shortestPath(
+        (start)-[:{rels}*..25]-(end)
+    )
+    WHERE p IS NOT NULL {avoid_clause}
+    RETURN p
+    LIMIT 1
+    """
+
+    with _session() as session:
+        record = session.run(cypher, **params).single()
+        return record["p"] if record else None
+
+
+def _find_weighted_path(
+    origin_id: str,
+    destination_id: str,
+    network: str,
+    weight_property: str = "time_weight",
+    avoid_station_id: Optional[str] = None,
+) -> Optional[tuple[Path, float]]:
+    if not _driver:
+        return None
+
+    net = _infer_network(origin_id, destination_id, network)
+    rels = _rel_pattern(net)
+    start_label = _node_label(origin_id)
+    end_label = _node_label(destination_id)
+
+    avoid_clause = ""
+    params: dict[str, Any] = {
+        "origin_id": origin_id,
+        "destination_id": destination_id,
+    }
+    if avoid_station_id:
+        avoid_clause = "WHERE NONE(n IN nodes(path) WHERE n.station_id = $avoid_id)"
+        params["avoid_id"] = avoid_station_id
+
+    apoc_cypher = f"""
+    MATCH (start:{start_label} {{station_id: $origin_id}}),
+          (end:{end_label} {{station_id: $destination_id}})
+    CALL apoc.algo.dijkstra(
+        start, end,
+        '{rels}',
+        '{weight_property}'
+    ) YIELD path, weight
+    {avoid_clause}
+    RETURN path, weight
+    ORDER BY weight ASC
+    LIMIT 1
+    """
+
+    with _session() as session:
+        try:
+            record = session.run(apoc_cypher, **params).single()
+            if record:
+                return record["path"], float(record["weight"])
+        except Exception:
+            pass
+
+    path = _find_shortest_path(
+        origin_id, destination_id, network, avoid_station_id
+    )
+    if not path:
+        return None
+    weight = (
+        _path_time(path)
+        if weight_property == "time_weight"
+        else sum(rel.get("fare_weight") or 0 for rel in path.relationships)
+    )
+    return path, float(weight)
+
+
+def _route_result(
+    path: Path,
+    *,
+    fare_class: str = "standard",
+) -> dict[str, Any]:
+    stations = [_station_dict(n) for n in path.nodes]
+    station_ids = [s["station_id"] for s in stations]
+    return {
+        "found": True,
+        "origin_id": station_ids[0],
+        "destination_id": station_ids[-1],
+        "total_time_min": _path_time(path),
+        "total_fare_usd": _stops_fare(station_ids, fare_class),
+        "path": stations,
+        "legs": _path_legs(path),
+        "interchange_points": [
+            s for s in stations if s["station_id"].startswith("MS")
+            and any(
+                leg["relationship"] == "INTERCHANGE_TO"
+                for leg in _path_legs(path)
+                if leg["from_station_id"] == s["station_id"]
+                or leg["to_station_id"] == s["station_id"]
+            )
+        ],
+    }
+
+
+def query_shortest_route(
+    origin_id: str,
+    destination_id: str,
+    network: str = "auto",
+) -> dict:
+    """
+    Find the fastest path between two stations (minimum travel time).
+
+    Args:
+        origin_id: e.g. "MS01" or "NR01"
+        destination_id: e.g. "MS14" or "NR05"
+        network: "metro", "rail", or "auto"
+
+    Returns:
+        dict with found, origin_id, destination_id, total_time_min, path, legs
+    """
+    if not _driver:
+        return {"found": False, "error": "Neo4j driver is not initialized."}
+
+    origin_id = origin_id.upper()
+    destination_id = destination_id.upper()
+
+    result = _find_weighted_path(
+        origin_id, destination_id, network, weight_property="time_weight"
+    )
+    if not result:
+        return {"found": False, "origin_id": origin_id, "destination_id": destination_id}
+
+    path, _ = result
+    data = _route_result(path)
+    data["origin_id"] = origin_id
+    data["destination_id"] = destination_id
+    return data
+
+
+def query_cheapest_route(
+    origin_id: str,
+    destination_id: str,
+    network: str = "auto",
+    fare_class: str = "standard",
+) -> dict:
+    """
+    Find the cheapest path using stops-based fare rules from ticket_types.json.
+
+    Args:
+        fare_class: "standard" or "first" (national rail only)
+
+    Returns:
+        dict with found, total_fare_usd, path, legs
+    """
+    if not _driver:
+        return {"found": False, "error": "Neo4j driver is not initialized."}
+
+    origin_id = origin_id.upper()
+    destination_id = destination_id.upper()
+
+    result = _find_weighted_path(
+        origin_id, destination_id, network, weight_property="fare_weight"
+    )
+    if not result:
+        return {"found": False, "origin_id": origin_id, "destination_id": destination_id}
+
+    path, _ = result
+    data = _route_result(path, fare_class=fare_class)
+    data["origin_id"] = origin_id
+    data["destination_id"] = destination_id
+    data["total_cost"] = data["total_fare_usd"]
+    return data
+
+
+def query_alternative_routes(
+    origin_id: str,
+    destination_id: str,
+    avoid_station_id: str,
+    network: str = "auto",
+    max_routes: int = 3,
+) -> list[list[dict]]:
+    """
+    Find routes that avoid a closed or delayed station.
+
+    Returns:
+        List of routes; each route is a list of leg dicts.
+    """
+    if not _driver:
+        return []
+
+    origin_id = origin_id.upper()
+    destination_id = destination_id.upper()
+    avoid_station_id = avoid_station_id.upper()
+
+    net = _infer_network(origin_id, destination_id, network)
+    rels = _rel_pattern(net)
+    start_label = _node_label(origin_id)
+    end_label = _node_label(destination_id)
+
+    cypher = f"""
+    MATCH (start:{start_label} {{station_id: $origin_id}}),
+          (end:{end_label} {{station_id: $destination_id}})
+    MATCH p = (start)-[:{rels}*..25]-(end)
+    WHERE NONE(n IN nodes(p) WHERE n.station_id = $avoid_id)
+    WITH p,
+         reduce(t = 0, r IN relationships(p) | t + coalesce(r.time_weight, 0)) AS total_time
+    RETURN p, total_time
+    ORDER BY total_time ASC
+    LIMIT $max_routes
+    """
+
+    routes: list[list[dict]] = []
+    with _session() as session:
+        for record in session.run(
+            cypher,
+            origin_id=origin_id,
+            destination_id=destination_id,
+            avoid_id=avoid_station_id,
+            max_routes=max_routes,
+        ):
+            legs = _path_legs(record["p"])
+            legs[0]["total_time_min"] = record["total_time"] if legs else record["total_time"]
+            routes.append(legs)
+
+    return routes
+
+
+def query_interchange_path(origin_id: str, destination_id: str) -> dict:
+    """
+    Cross-network path (metro ↔ national rail) via INTERCHANGE_TO.
+
+    Returns:
+        dict with found, path, interchange_points, total_time_min
+    """
+    origin_id = origin_id.upper()
+    destination_id = destination_id.upper()
+
+    if _infer_network(origin_id, destination_id, "auto") != "cross":
+        return {
+            "found": False,
+            "error": "Both stations are on the same network; use query_shortest_route instead.",
+            "origin_id": origin_id,
+            "destination_id": destination_id,
+        }
+
+    cypher = """
+    MATCH (start {station_id: $origin_id}), (end {station_id: $destination_id})
+    MATCH p = shortestPath(
+        (start)-[:METRO_LINK|RAIL_LINK|INTERCHANGE_TO*..25]-(end)
+    )
+    WHERE ANY(r IN relationships(p) WHERE type(r) = 'INTERCHANGE_TO')
+    WITH p,
+         reduce(t = 0, r IN relationships(p) | t + coalesce(r.time_weight, 0)) AS total_time
+    RETURN p, total_time
+    ORDER BY total_time ASC
+    LIMIT 1
+    """
+
+    if not _driver:
+        return {"found": False, "error": "Neo4j driver is not initialized."}
+
+    with _session() as session:
+        record = session.run(
+            cypher, origin_id=origin_id, destination_id=destination_id
+        ).single()
+
+    if not record:
+        return {"found": False, "origin_id": origin_id, "destination_id": destination_id}
+
+    data = _route_result(record["p"])
+    data["total_time_min"] = int(record["total_time"])
+    data["requires_interchange"] = True
+    return data
+
+
+def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
+    """
+    Stations within N hops of a disrupted station.
+
+    Returns:
+        List of {station_id, name, hops_away, lines_affected, network}
+    """
+    if not _driver:
+        return []
+
+    delayed_station_id = delayed_station_id.upper()
+    hops = max(1, min(hops, 5))
+
+    cypher = f"""
+    MATCH (origin {{station_id: $station_id}})
+    MATCH (origin)-[rels:METRO_LINK|RAIL_LINK|INTERCHANGE_TO*1..{hops}]-(affected)
+    WHERE affected.station_id <> $station_id
+    WITH affected, min(size(rels)) AS hops_away,
+         [r IN rels | r.line] AS line_list
+    RETURN DISTINCT
+        affected.station_id AS station_id,
+        affected.name AS name,
+        hops_away,
+        coalesce(affected.lines, [affected.line]) AS lines_affected,
+        CASE WHEN 'MetroStation' IN labels(affected) THEN 'metro' ELSE 'rail' END AS network
+    ORDER BY hops_away, station_id
+    """
+
+    with _session() as session:
+        return [dict(row) for row in session.run(cypher, station_id=delayed_station_id)]
+
+
+def query_station_connections(station_id: str) -> list[dict]:
+    """
+    List direct neighbours and link metadata from a station.
+
+    Args:
+        station_id: e.g. "MS01" or "NR01"
+    """
+    if not _driver:
+        return []
+
+    station_id = station_id.upper()
+    label = _node_label(station_id)
+
+    cypher = f"""
+    MATCH (s:{label} {{station_id: $station_id}})-[r]-(n)
+    RETURN
+        n.station_id AS station_id,
+        n.name AS name,
+        type(r) AS relationship,
+        r.line AS line,
+        coalesce(r.travel_time_min, r.walking_time_min) AS travel_time_min,
+        CASE WHEN startNode(r) = s THEN 'outbound' ELSE 'inbound' END AS direction,
+        CASE WHEN 'MetroStation' IN labels(n) THEN 'metro' ELSE 'rail' END AS network
+  ORDER BY relationship, station_id
+    """
+
+    with _session() as session:
+        return [dict(row) for row in session.run(cypher, station_id=station_id)]
+
 
 class TransitQueryManager:
-    """
-    全面升級版 TransitQueryManager：
-    支援基礎票價、每站費率、轉乘路徑規劃與 Ripple Effect 漣漪效應分析。
-    """
-    
+    """Thin wrapper for agent.py and test_queries.py."""
+
     def __init__(self):
-        try:
-            self.driver = GraphDatabase.driver(settings.NEO4J_URI, auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD))
-        except Exception as e:
-            print(f"Driver Initialization Failed: {e}")
-            self.driver = None
+        self.driver = _driver
 
     def close(self):
-        if self.driver: self.driver.close()
+        pass
 
-    def query_shortest_route(self, origin_id: str, destination_id: str) -> Dict[str, Any]:
-        """精準路徑規劃，累加時間並解析站點資訊"""
-        if not self.driver: return {"error": "Neo4j driver offline."}
+    def query_shortest_route(self, origin_id: str, destination_id: str, network: str = "auto"):
+        return query_shortest_route(origin_id, destination_id, network)
 
-        cypher_query = """
-        MATCH p = (start {station_id: $origin_id})-[:METRO_LINK|RAIL_LINK|INTERCHANGE_TO*..15]->(end {station_id: $destination_id})
-        WITH p, 
-             reduce(s = 0, r IN relationships(p) | s + coalesce(r.travel_time_min, r.walking_time_min, 0)) AS total_time
-        RETURN p, total_time
-        ORDER BY total_time ASC LIMIT 1
-        """
-        
-        with self.driver.session() as session:
-            record = session.run(cypher_query, origin_id=origin_id, destination_id=destination_id).single()
-            if not record: return {"found": False}
-            
-            path = record["p"]
-            stations_path = [{"station_id": n.get("station_id"), "name": n.get("name")} for n in path.nodes]
-            return {"found": True, "total_time_min": record["total_time"], "path": stations_path}
+    def query_cheapest_route(
+        self,
+        origin_id: str,
+        destination_id: str,
+        network: str = "auto",
+        fare_class: str = "standard",
+    ):
+        return query_cheapest_route(origin_id, destination_id, network, fare_class)
 
-    def query_cheapest_route(self, origin_id: str, destination_id: str) -> Dict[str, Any]:
-        """
-        全面升級版計價：結合起步價與路段費率。
-        邏輯：total = 起點的 base_fare + SUM(segment_cost)
-        """
-        if not self.driver: return {"error": "Neo4j driver offline."}
-        
-        cypher_query = """
-        MATCH p = (start {station_id: $origin_id})-[:METRO_LINK|RAIL_LINK|INTERCHANGE_TO*..15]->(end {station_id: $destination_id})
-        WITH p, start,
-             reduce(s = 0, r IN relationships(p) | s + coalesce(r.segment_cost, r.cost, 0)) AS total_segment_cost
-        RETURN p, (start.base_fare + total_segment_cost) AS total_cost
-        ORDER BY total_cost ASC LIMIT 1
-        """
-        with self.driver.session() as session:
-            record = session.run(cypher_query, origin_id=origin_id, destination_id=destination_id).single()
-            if not record: return {"found": False}
-            
-            # 解析路徑回傳
-            path = record["p"]
-            stations_path = [{"station_id": n.get("station_id"), "name": n.get("name")} for n in path.nodes]
-            return {
-                "found": True, 
-                "total_cost": round(record["total_cost"], 2), 
-                "path": stations_path
-            }
+    def query_alternative_routes(self, *args, **kwargs):
+        return query_alternative_routes(*args, **kwargs)
 
-    def query_delay_ripple(self, station_id: str, depth: int = 2) -> List[Dict[str, Any]]:
-        """分析漣漪效應，返回深度內所有受影響站點"""
-        if not self.driver: return []
-        
-        cypher_query = """
-        MATCH (s {station_id: $station_id})-[*1..2]-(affected)
-        WHERE affected.station_id <> $station_id
-        RETURN DISTINCT affected.station_id AS station_id, affected.name AS name, labels(affected)[0] AS type
-        """
-        with self.driver.session() as session:
-            return [record.data() for record in session.run(cypher_query, station_id=station_id)]
+    def query_interchange_path(self, origin_id: str, destination_id: str):
+        return query_interchange_path(origin_id, destination_id)
 
-    def get_station_details(self, station_id: str) -> Dict[str, Any]:
-        """額外擴充：查詢單一車站所有政策與屬性"""
-        with self.driver.session() as session:
-            record = session.run("MATCH (s {station_id: $sid}) RETURN s", sid=station_id).single()
-            return dict(record["s"]) if record else {}
+    def query_delay_ripple(self, station_id: str, depth: int = 2, hops: int | None = None):
+        return query_delay_ripple(station_id, hops=hops if hops is not None else depth)
+
+    def query_station_connections(self, station_id: str):
+        return query_station_connections(station_id)
+
+    def get_station_details(self, station_id: str) -> dict:
+        if not _driver:
+            return {}
+        label = _node_label(station_id.upper())
+        with _session() as session:
+            record = session.run(
+                f"MATCH (s:{label} {{station_id: $sid}}) RETURN s",
+                sid=station_id.upper(),
+            ).single()
+        return dict(record["s"]) if record else {}

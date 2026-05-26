@@ -1,94 +1,237 @@
 """
-TransitFlow — Neo4j Seeding Script (Full Business Logic Edition)
-=============================================================
-功能：
-1. 自動讀取專案根目錄下的 train-mock-data/metro_stations.json
-2. 完整部署站點節點、METRO_LINK 關係
-3. 注入商業邏輯：自動將 base_fare, per_stop_rate 與 segment_cost 寫入節點與關係
-4. 確保與 queries.py 的邏輯完全串接
+TransitFlow — Neo4j seeding
+=============================
+1. Applies constraints from databases/graph/seed.cypher
+2. Loads metro_stations.json and national_rail_stations.json
+3. Creates MetroStation / NationalRailStation nodes and all links
 """
 
+from __future__ import annotations
+
 import json
-import os
 import sys
+from pathlib import Path
+
 from neo4j import GraphDatabase
 
-def seed_from_json():
-    json_path = "train-mock-data/metro_stations.json"
-    
-    if not os.path.exists(json_path):
-        print(f"❌ 錯誤：找不到檔案 {json_path}")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from skeleton.config import (
+    DATA_DIR,
+    INTERCHANGE_WALKING_TIME_MIN,
+    METRO_BASE_FARE_USD,
+    METRO_PER_STOP_RATE_USD,
+    NEO4J_DATABASE,
+    NEO4J_PASSWORD,
+    NEO4J_URI,
+    NEO4J_USER,
+    PROJECT_ROOT,
+    RAIL_FIRST_BASE_FARE_USD,
+    RAIL_FIRST_PER_STOP_RATE_USD,
+    RAIL_STANDARD_BASE_FARE_USD,
+    RAIL_STANDARD_PER_STOP_RATE_USD,
+)
+
+SEED_CYPHER = PROJECT_ROOT / "databases" / "graph" / "seed.cypher"
+METRO_JSON = DATA_DIR / "metro_stations.json"
+RAIL_JSON = DATA_DIR / "national_rail_stations.json"
+
+
+def _load_json(path: Path) -> list[dict]:
+    if not path.exists():
+        print(f"Error: missing {path}")
         sys.exit(1)
+    with path.open(encoding="utf-8") as fh:
+        return json.load(fh)
 
-    with open(json_path, 'r', encoding='utf-8') as f:
-        stations = json.load(f)
 
-    uri = os.getenv("NEO4J_URI", "bolt://localhost:7688")
-    user = os.getenv("NEO4J_USER", "neo4j")
-    pwd = os.getenv("NEO4J_PASSWORD", "transitflow")
-    
-    driver = GraphDatabase.driver(uri, auth=(user, pwd))
+def _run_cypher_file(session, path: Path) -> None:
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    statements = []
+    buffer: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("//"):
+            continue
+        buffer.append(line)
+        if stripped.endswith(";"):
+            statements.append("\n".join(buffer).rstrip().rstrip(";"))
+            buffer = []
+    if buffer:
+        statements.append("\n".join(buffer))
 
+    for stmt in statements:
+        session.run(stmt)
+
+
+def seed() -> None:
+    metro_stations = _load_json(METRO_JSON)
+    rail_stations = _load_json(RAIL_JSON)
+
+    driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
     try:
-        with driver.session(database="neo4j") as session:
-            print("🧹 正在清理舊資料...")
+        with driver.session(database=NEO4J_DATABASE) as session:
+            print("Clearing existing graph...")
             session.run("MATCH (n) DETACH DELETE n")
-            
-            # 1. 建立車站節點 (注入 base_fare 與 per_stop_rate 商業邏輯)
-            print(f"🏗️ 正在建立 {len(stations)} 個車站節點...")
-            for s in stations:
-                session.run("""
-                    MERGE (n:Station {station_id: $id})
-                    SET n.name = $name, 
-                        n.lines = $lines, 
-                        n.type = 'Metro',
-                        n.is_nr_interchange = $is_nr,
-                        n.base_fare = 1.5,
-                        n.per_stop_rate = 0.1
-                """, id=s['station_id'], 
-                     name=s['name'], 
-                     lines=s['lines'], 
-                     is_nr=s.get('is_interchange_national_rail', False))
 
-            # 2. 建立 METRO_LINK 關係 (注入 segment_cost，與 queries.py 邏輯一致)
-            print("🔗 正在建立 METRO_LINK 關係...")
-            for s in stations:
-                for adj in s['adjacent_stations']:
-                    session.run("""
-                        MATCH (a:Station {station_id: $id1}), (b:Station {station_id: $id2})
-                        MERGE (a)-[:METRO_LINK {
-                            line: $line, 
-                            travel_time_min: $time,
-                            segment_cost: 0.1
-                        }]->(b)
-                    """, id1=s['station_id'], 
-                         id2=adj['station_id'], 
-                         line=adj['line'], 
-                         time=adj['travel_time_min'])
+            print("Applying schema constraints from seed.cypher...")
+            _run_cypher_file(session, SEED_CYPHER)
 
-            # 3. 建立轉乘關係 (保持轉乘站點定義)
-            print("🚉 正在建立 INTERCHANGE_TO 轉乘站點...")
-            for s in stations:
-                if s.get('is_interchange_national_rail'):
-                    nr_id = s['interchange_national_rail_station_id']
-                    session.run("""
-                        MATCH (m:Station {station_id: $m_id})
-                        MERGE (nr:Station {station_id: $nr_id})
-                        SET nr.type = 'Rail', 
-                            nr.name = 'National Rail Station',
-                            nr.base_fare = 5.0,
-                            nr.is_nr_interchange = true
-                        MERGE (m)-[:INTERCHANGE_TO {walking_time_min: 5, cost: 0.0}]->(nr)
-                        MERGE (nr)-[:INTERCHANGE_TO {walking_time_min: 5, cost: 0.0}]->(m)
-                    """, m_id=s['station_id'], nr_id=nr_id)
+            print(f"Creating {len(metro_stations)} MetroStation nodes...")
+            for s in metro_stations:
+                session.run(
+                    """
+                    MERGE (n:MetroStation {station_id: $id})
+                    SET n.name = $name,
+                        n.lines = $lines,
+                        n.is_interchange_metro = $is_metro_ix,
+                        n.interchange_metro_lines = $metro_ix_lines,
+                        n.is_interchange_national_rail = $is_nr_ix,
+                        n.interchange_nr_station_id = $nr_ix_id,
+                        n.base_fare_usd = $base_fare,
+                        n.per_stop_rate_usd = $per_stop
+                    """,
+                    id=s["station_id"],
+                    name=s["name"],
+                    lines=s["lines"],
+                    is_metro_ix=s.get("is_interchange_metro", False),
+                    metro_ix_lines=s.get("interchange_metro_lines", []),
+                    is_nr_ix=s.get("is_interchange_national_rail", False),
+                    nr_ix_id=s.get("interchange_national_rail_station_id"),
+                    base_fare=METRO_BASE_FARE_USD,
+                    per_stop=METRO_PER_STOP_RATE_USD,
+                )
 
-        print("✅ 全地圖節點、轉乘邏輯與票價結構已成功部署！")
-    
-    except Exception as e:
-        print(f"❌ 部署過程中發生錯誤: {e}")
-    
+            print(f"Creating {len(rail_stations)} NationalRailStation nodes...")
+            for s in rail_stations:
+                session.run(
+                    """
+                    MERGE (n:NationalRailStation {station_id: $id})
+                    SET n.name = $name,
+                        n.lines = $lines,
+                        n.is_interchange_national_rail = $is_nr_ix,
+                        n.interchange_national_rail_lines = $nr_ix_lines,
+                        n.is_interchange_metro = $is_metro_ix,
+                        n.interchange_metro_station_id = $metro_ix_id,
+                        n.base_fare_standard_usd = $base_std,
+                        n.per_stop_rate_standard_usd = $per_stop_std,
+                        n.base_fare_first_usd = $base_first,
+                        n.per_stop_rate_first_usd = $per_stop_first
+                    """,
+                    id=s["station_id"],
+                    name=s["name"],
+                    lines=s["lines"],
+                    is_nr_ix=s.get("is_interchange_national_rail", False),
+                    nr_ix_lines=s.get("interchange_national_rail_lines", []),
+                    is_metro_ix=s.get("is_interchange_metro", False),
+                    metro_ix_id=s.get("interchange_metro_station_id"),
+                    base_std=RAIL_STANDARD_BASE_FARE_USD,
+                    per_stop_std=RAIL_STANDARD_PER_STOP_RATE_USD,
+                    base_first=RAIL_FIRST_BASE_FARE_USD,
+                    per_stop_first=RAIL_FIRST_PER_STOP_RATE_USD,
+                )
+
+            metro_links = 0
+            for s in metro_stations:
+                for adj in s.get("adjacent_stations", []):
+                    session.run(
+                        """
+                        MATCH (a:MetroStation {station_id: $from_id})
+                        MATCH (b:MetroStation {station_id: $to_id})
+                        MERGE (a)-[r:METRO_LINK {line: $line}]->(b)
+                        SET r.travel_time_min = $time,
+                            r.time_weight = $time,
+                            r.fare_weight = $fare_weight
+                        """,
+                        from_id=s["station_id"],
+                        to_id=adj["station_id"],
+                        line=adj["line"],
+                        time=adj["travel_time_min"],
+                        fare_weight=METRO_PER_STOP_RATE_USD,
+                    )
+                    metro_links += 1
+            print(f"  METRO_LINK relationships: {metro_links}")
+
+            rail_links = 0
+            for s in rail_stations:
+                for adj in s.get("adjacent_stations", []):
+                    session.run(
+                        """
+                        MATCH (a:NationalRailStation {station_id: $from_id})
+                        MATCH (b:NationalRailStation {station_id: $to_id})
+                        MERGE (a)-[r:RAIL_LINK {line: $line}]->(b)
+                        SET r.travel_time_min = $time,
+                            r.time_weight = $time,
+                            r.fare_weight = $fare_weight
+                        """,
+                        from_id=s["station_id"],
+                        to_id=adj["station_id"],
+                        line=adj["line"],
+                        time=adj["travel_time_min"],
+                        fare_weight=RAIL_STANDARD_PER_STOP_RATE_USD,
+                    )
+                    rail_links += 1
+            print(f"  RAIL_LINK relationships: {rail_links}")
+
+            interchange_pairs: set[tuple[str, str]] = set()
+            for s in metro_stations:
+                if s.get("is_interchange_national_rail") and s.get(
+                    "interchange_national_rail_station_id"
+                ):
+                    interchange_pairs.add(
+                        (s["station_id"], s["interchange_national_rail_station_id"])
+                    )
+            for s in rail_stations:
+                if s.get("is_interchange_metro") and s.get("interchange_metro_station_id"):
+                    interchange_pairs.add(
+                        (s["interchange_metro_station_id"], s["station_id"])
+                    )
+
+            ix_count = 0
+            walk = INTERCHANGE_WALKING_TIME_MIN
+            for metro_id, rail_id in interchange_pairs:
+                session.run(
+                    """
+                    MATCH (m:MetroStation {station_id: $metro_id})
+                    MATCH (r:NationalRailStation {station_id: $rail_id})
+                    MERGE (m)-[fwd:INTERCHANGE_TO]->(r)
+                    SET fwd.walking_time_min = $walk,
+                        fwd.time_weight = $walk,
+                        fwd.fare_weight = 0
+                    MERGE (r)-[rev:INTERCHANGE_TO]->(m)
+                    SET rev.walking_time_min = $walk,
+                        rev.time_weight = $walk,
+                        rev.fare_weight = 0
+                    """,
+                    metro_id=metro_id,
+                    rail_id=rail_id,
+                    walk=walk,
+                )
+                ix_count += 1
+            print(f"  INTERCHANGE_TO pairs: {ix_count}")
+
+            counts = session.run(
+                """
+                MATCH (m:MetroStation) WITH count(m) AS metro
+                MATCH (r:NationalRailStation) WITH metro, count(r) AS rail
+                MATCH ()-[l:METRO_LINK]->() WITH metro, rail, count(l) AS metro_links
+                MATCH ()-[n:RAIL_LINK]->() WITH metro, rail, metro_links, count(n) AS rail_links
+                MATCH ()-[i:INTERCHANGE_TO]->() WITH metro, rail, metro_links, rail_links, count(i) AS ix
+                RETURN metro, rail, metro_links, rail_links, ix
+                """
+            ).single()
+            print(
+                f"Done — MetroStation: {counts['metro']}, "
+                f"NationalRailStation: {counts['rail']}, "
+                f"METRO_LINK: {counts['metro_links']}, "
+                f"RAIL_LINK: {counts['rail_links']}, "
+                f"INTERCHANGE_TO: {counts['ix']}"
+            )
     finally:
         driver.close()
 
+
 if __name__ == "__main__":
-    seed_from_json()
+    seed()
