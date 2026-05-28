@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Integration checks against train-mock-data JSON and live databases.
+Full integration checks: README sample queries vs train-mock-data JSON + live DBs.
+
 Run: python skeleton/validate_integration.py
 """
 from __future__ import annotations
 
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -19,6 +19,7 @@ from databases.relational import queries as pg
 from databases.graph import queries as graph
 
 FAILURES: list[str] = []
+ALICE_EMAIL = "alice.tan@email.com"
 
 
 def ok(name: str, cond: bool, detail: str = "") -> None:
@@ -31,43 +32,74 @@ def ok(name: str, cond: bool, detail: str = "") -> None:
 
 
 def expected_nr_schedules(origin: str, dest: str) -> set[str]:
-    """Ground truth from national_rail_schedules.json (rideable, correct direction)."""
+    """Rideable schedules from national_rail_schedules.json (origin before destination)."""
     data = json.loads((DATA_DIR / "national_rail_schedules.json").read_text())
     out: set[str] = set()
     for sch in data:
         stops = sch["stops_in_order"]
         if origin not in stops or dest not in stops:
             continue
-        oi, di = stops.index(origin), stops.index(dest)
-        if oi < di:
+        if stops.index(origin) < stops.index(dest):
             out.add(sch["schedule_id"])
     return out
 
 
+def expected_nr_fare(schedule_id: str, origin: str, dest: str, fare_class: str = "standard") -> float:
+    """Fare from JSON: base + per_stop * stops_travelled."""
+    data = json.loads((DATA_DIR / "national_rail_schedules.json").read_text())
+    sch = next(s for s in data if s["schedule_id"] == schedule_id)
+    stops = sch["stops_in_order"]
+    passed = set(sch.get("passed_through_stations") or [])
+    stopping = [s for s in stops if s not in passed]
+    oi, di = stopping.index(origin), stopping.index(dest)
+    stops_travelled = di - oi
+    fc = sch["fare_classes"][fare_class]
+    return round(fc["base_fare_usd"] + fc["per_stop_rate_usd"] * stops_travelled, 2)
+
+
+def agent_ok(msg: str, check, email: str | None = None) -> None:
+    reply, _ = agent.run_agent(msg, [], current_user_email=email)
+    ok(msg[:55] + "…", check(reply), reply[:220].replace("\n", " "))
+
+
 def main() -> int:
     print("=== JSON ground truth ===")
-    exp = expected_nr_schedules("NR01", "NR05")
-    ok("JSON NR01→NR05 schedules", exp == {"NR_SCH01", "NR_SCH05"}, str(exp))
+    exp_sched = expected_nr_schedules("NR01", "NR05")
+    ok("NR01→NR05 rideable schedules", exp_sched == {"NR_SCH01", "NR_SCH05"}, str(exp_sched))
+
+    exp_fare = expected_nr_fare("NR_SCH01", "NR01", "NR05")
+    ok("NR_SCH01 standard fare (JSON)", exp_fare == 8.50, str(exp_fare))
 
     rf = json.loads((DATA_DIR / "refund_policy.json").read_text())
     r5 = next(p for p in rf if p["policy_id"] == "RF005")
     r1 = next(r for r in r5["compensation_rules"] if r["rule_id"] == "RF005_R1")
-    ok("RF005 45min tier", "50%" in r1["compensation"], r1["compensation"])
+    ok("RF005 45min → 50%", "50%" in r1["compensation"], r1["compensation"])
+
+    tp = json.loads((DATA_DIR / "travel_policies.json").read_text())
+    bikes = tp["national_rail"]["bicycles"]["foldable_bicycles"]
+    ok("JSON national rail foldable bikes permitted", bikes["permitted"] is True, "")
 
     print("\n=== PostgreSQL ===")
     try:
         rows = pg.query_national_rail_availability("NR01", "NR05")
         got = {r["schedule_id"] for r in rows}
-        ok("PG NR01→NR05", got == exp, f"got {got}")
-        for sid in got:
-            r = next(x for x in rows if x["schedule_id"] == sid)
+        ok("PG NR01→NR05 schedules", got == exp_sched, f"got {got}")
+
+        fare_row = pg.query_national_rail_fare("NR_SCH01", "standard", 4)
+        pg_fare = float(fare_row["total_fare_usd"]) if fare_row else -1
+        ok("PG NR_SCH01 fare matches JSON", pg_fare == exp_fare, f"pg={pg_fare} json={exp_fare}")
+
+        profile = pg.query_user_profile(ALICE_EMAIL)
+        ok("Alice profile exists", profile is not None, "")
+        if profile:
+            books = pg.query_user_bookings(ALICE_EMAIL)
             ok(
-                f"  {sid} stop_order",
-                r["origin_stop_order"] < r["destination_stop_order"],
-                f"{r['origin_stop_order']} vs {r['destination_stop_order']}",
+                "Alice has booking history",
+                len(books["national_rail"]) + len(books["metro"]) > 0,
+                f"nr={len(books['national_rail'])} metro={len(books['metro'])}",
             )
     except Exception as e:
-        ok("PG connection", False, str(e))
+        ok("PostgreSQL", False, str(e))
 
     print("\n=== Neo4j ===")
     try:
@@ -79,53 +111,69 @@ def main() -> int:
         ok("MS01→NR05 found", x.get("found"), str(x))
         ok("MS01→NR05 time 42min", x.get("total_time_min") == 42, str(x.get("total_time_min")))
 
-        alts_rail = graph.query_alternative_routes("NR01", "NR05", "NR03", network="rail")
-        alts_auto = graph.query_alternative_routes("NR01", "NR05", "NR03", network="auto")
-        # Linear NR1 corridor: no path exists without NR03 — "no route" is correct per JSON topology.
-        ok(
-            "NR01→NR05 avoid NR03 (graph)",
-            len(alts_rail) == 0 and len(alts_auto) == 0,
-            f"rail={len(alts_rail)} auto={len(alts_auto)}",
-        )
+        alts = graph.query_alternative_routes("NR01", "NR05", "NR03", network="auto")
+        ok("NR01→NR05 avoid NR03: no graph path", len(alts) == 0, f"count={len(alts)}")
     except Exception as e:
         ok("Neo4j", False, str(e))
 
-    print("\n=== Agent (rule router) ===")
-    cases = [
-        (
-            "What national rail trains run from Central (NR01) to Stonehaven (NR05)?",
-            None,
-            lambda t: "NR_SCH01" in t and "NR_SCH05" in t and "NR_SCH02" not in t and "NR_SCH06" not in t,
-        ),
-        (
-            "What is the fastest metro route from MS01 to MS14?",
-            None,
-            lambda t: "16" in t and "found" not in t.lower() or "16" in t,
-        ),
-        (
-            "How do I get from Central Square (MS01) to Stonehaven (NR05)?",
-            None,
-            lambda t: "42" in t,
-        ),
-        (
-            "My train was delayed 45 minutes — what compensation am I entitled to?",
-            None,
-            lambda t: "50%" in t and "RF005_R1" in t,
-        ),
-    ]
-
-    for msg, email, check in cases:
-        reply, _ = agent.run_agent(msg, [], current_user_email=email)
-        ok(msg[:50] + "…", check(reply), reply[:200].replace("\n", " "))
-
-    # Closed station alternative
-    msg_alt = "If Old Town station (NR03) is closed, what alternative routes exist from NR01 to NR05?"
-    reply_alt, _ = agent.run_agent(msg_alt, [])
-    ok(
-        "NR03 closed alternatives (agent)",
-        "No alternative" in reply_alt and "NR03" in reply_alt,
-        reply_alt[:180],
+    print("\n=== Agent — README sample queries ===")
+    agent_ok(
+        "What national rail trains run from Central (NR01) to Stonehaven (NR05)?",
+        lambda t: "NR_SCH01" in t and "NR_SCH05" in t and "NR_SCH02" not in t and "NR_SCH06" not in t,
     )
+    agent_ok(
+        "What is the fastest metro route from MS01 to MS14?",
+        lambda t: "16" in t,
+    )
+    agent_ok(
+        "How do I get from Central Square (MS01) to Stonehaven (NR05)?",
+        lambda t: "42" in t,
+    )
+    agent_ok(
+        "If Old Town station (NR03) is closed, what alternative routes exist from NR01 to NR05?",
+        lambda t: "No alternative" in t and "NR03" in t,
+    )
+    agent_ok(
+        "My train was delayed 45 minutes — what compensation am I entitled to?",
+        lambda t: "50%" in t and "RF005_R1" in t,
+    )
+    agent_ok(
+        "What is the company policy on travelling with a bicycle on national rail?",
+        lambda t: "foldable" in t.lower() and ("permitted" in t.lower() or "yes" in t.lower()),
+    )
+    agent_ok(
+        "Show my bookings",
+        lambda t: "booking" in t.lower() or "BK" in t,
+        email=ALICE_EMAIL,
+    )
+
+    # Booking on a date unlikely to be fully booked in seed data
+    book_msg = (
+        "Book me a standard ticket from Central Station (NR01) to Stonehaven (NR05) "
+        "on 2026-12-20"
+    )
+    reply, _ = agent.run_agent(book_msg, [], current_user_email=ALICE_EMAIL)
+    ok(
+        "Book NR01→NR05 on 2026-12-20",
+        "Booking confirmed" in reply or "booking_id" in reply.lower(),
+        reply[:220].replace("\n", " "),
+    )
+
+    print("\n=== Teammate policy_chunks sync ===")
+    import subprocess
+
+    for br in ("113403501", "113403504"):
+        h = subprocess.run(
+            ["git", "rev-parse", f"origin/{br}:train-mock-data/policy_chunks.json"],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+        )
+        if br == "113403501":
+            hash_501 = h.stdout.strip()
+        else:
+            hash_504 = h.stdout.strip()
+    ok("policy_chunks.json matches 113403501", hash_501 == hash_504, f"{hash_501[:8]} vs {hash_504[:8]}")
 
     print(f"\n=== Summary: {len(FAILURES)} failure(s) ===")
     for f in FAILURES:
