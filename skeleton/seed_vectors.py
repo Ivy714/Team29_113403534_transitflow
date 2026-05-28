@@ -1,17 +1,19 @@
 """
-TransitFlow — pgvector Policy Document Seeder
-Run once after starting Docker:
+TransitFlow — pgvector policy document seeder
+=============================================
+
+Run once after PostgreSQL is up and seeded::
+
     python skeleton/seed_vectors.py
 
-This script:
-  1. Loads policy chunks from train-mock-data/policy_chunks.json
-  2. Embeds each document using the configured LLM provider
-  3. Stores the text + vector in PostgreSQL (policy_documents table)
+Workflow:
+  1. Ensure ``policy_documents`` columns exist (``ensure_policy_schema``).
+  2. Load pre-chunked policies from ``train-mock-data/policy_chunks.json``.
+  3. Embed each chunk with the active LLM provider (Ollama or Gemini).
+  4. Upsert rows via ``store_policy_document`` (ON CONFLICT on ``chunk_id``).
 
-Note: Gemini free tier has ~1500 requests/minute — this script makes ~13 calls, well within limits.
-
-Students: To extend the assistant's knowledge, add entries to the JSON files in
-train-mock-data/ and re-run this script.
+Re-run after editing policy JSON or switching embedding models.
+Ollama default: ``nomic-embed-text`` (768 dimensions).
 """
 
 import json

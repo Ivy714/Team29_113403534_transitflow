@@ -1,10 +1,17 @@
 """
 TransitFlow — Gradio Web Interface
 ====================================
-Run with:  python skeleton/ui.py
-Then open: http://localhost:7860
+Run from the project root::
 
-Students: You do NOT need to change this file.
+    python skeleton/ui.py
+
+Then open http://127.0.0.1:7860 (or the port set via ``GRADIO_SERVER_PORT``).
+
+The UI wires chat messages to ``skeleton.agent.run_agent``, and auth forms to
+``databases.relational.queries`` login/register helpers.
+
+Chat history uses Gradio 4 ``Chatbot(type="messages")`` format:
+``[{"role": "user"|"assistant", "content": str}, ...]``.
 """
 
 import sys
@@ -36,6 +43,12 @@ SECRET_QUESTIONS = [
 
 def chat(user_message: str, history_display: list, agent_history: list,
          show_debug: bool, current_user: str):
+    """
+    Handle one user message: call the agent, append to Gradio + LLM histories.
+
+    ``history_display`` is shown in the Chatbot (messages format).
+    ``agent_history`` is the OpenAI-style list passed to the LLM on fallback.
+    """
     if not user_message.strip():
         return history_display, agent_history, gr.update()
 
@@ -59,6 +72,7 @@ def chat(user_message: str, history_display: list, agent_history: list,
 
 
 def clear_conversation():
+    """Reset chat UI, agent history, and hide the debug panel."""
     return [], [], gr.update(value="", visible=False)
 
 
@@ -264,12 +278,13 @@ EXAMPLES = [
     "What is the company policy on travelling with a bicycle on national rail?",
     "Show my bookings",
     "Book NR01 to NR05 on 2026-06-15",
+    "How many seats are available on NR_SCH01 on 2026-06-15?",
 ]
 
 
 # ── Build UI ───────────────────────────────────────────────────────────────────
 
-with gr.Blocks(title="TransitFlow") as demo:
+with gr.Blocks(title="TransitFlow", theme=gr.themes.Soft()) as demo:
 
     # ── Hidden state ──────────────────────────────────────────────────
     agent_history_state = gr.State([])
@@ -332,7 +347,11 @@ with gr.Blocks(title="TransitFlow") as demo:
 
         # ── Left: chat ────────────────────────────────────────────────
         with gr.Column(scale=3):
-            chatbot = gr.Chatbot(label="TransitFlow Assistant", height=420)
+            chatbot = gr.Chatbot(
+                label="TransitFlow Assistant",
+                height=420,
+                type="messages",
+            )
 
             with gr.Row():
                 msg = gr.Textbox(
@@ -495,9 +514,13 @@ with gr.Blocks(title="TransitFlow") as demo:
 
 
 if __name__ == "__main__":
+    import os
+
+    # Use 127.0.0.1 to avoid macOS localhost binding issues; override port if 7860 is busy.
+    port = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
     demo.launch(
-        server_name="0.0.0.0",
-        server_port=7860,
+        server_name="127.0.0.1",
+        server_port=port,
         share=False,
-        theme=gr.themes.Soft(),
+        show_error=True,
     )

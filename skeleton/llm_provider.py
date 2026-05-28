@@ -14,15 +14,27 @@ Students: You do NOT need to change this file.
 
 from __future__ import annotations
 import requests
-from typing import List, Optional
-from google import genai
-from google.genai import types
+from typing import Any, List, Optional, Tuple
 
 from skeleton.config import (
     LLM_PROVIDER,
     GEMINI_API_KEY, GEMINI_CHAT_MODEL, GEMINI_EMBED_MODEL, GEMINI_EMBED_DIM,
     OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL, OLLAMA_EMBED_MODEL, OLLAMA_EMBED_DIM, OLLAMA_TIMEOUT,
 )
+
+
+def _import_gemini() -> Tuple[Any, Any]:
+    """Lazy import so Ollama-only installs do not require google-genai."""
+    try:
+        from google import genai
+        from google.genai import types
+
+        return genai, types
+    except ImportError as e:
+        raise ImportError(
+            "Gemini support requires google-genai. "
+            "Run: pip install google-genai"
+        ) from e
 
 
 class LLMProvider:
@@ -50,6 +62,7 @@ class LLMProvider:
                     "GEMINI_API_KEY is not set. Add it to your .env file, "
                     "or switch to LLM_PROVIDER=ollama to run without an API key."
                 )
+            genai, types = _import_gemini()
             self._gemini_client = genai.Client(
                 api_key=GEMINI_API_KEY,
                 http_options=types.HttpOptions(api_version="v1beta"),
@@ -92,6 +105,7 @@ class LLMProvider:
             if not GEMINI_API_KEY:
                 return "❌ GEMINI_API_KEY is not set — cannot switch to Gemini. Add it to your .env file."
             if self._gemini_client is None:
+                genai, types = _import_gemini()
                 self._gemini_client = genai.Client(
                     api_key=GEMINI_API_KEY,
                     http_options=types.HttpOptions(api_version="v1beta"),
@@ -148,6 +162,7 @@ class LLMProvider:
     # ── Gemini internals ───────────────────────────────────────────────────
 
     def _gemini_chat(self, messages: list[dict], system_prompt: str) -> str:
+        _, types = _import_gemini()
         contents = []
         for m in messages:
             role = "model" if m["role"] == "assistant" else "user"
@@ -164,6 +179,7 @@ class LLMProvider:
         return response.text
 
     def _gemini_embed(self, text: str) -> List[float]:
+        _import_gemini()
         if self._gemini_client is None:
             raise RuntimeError(
                 "Gemini client is not initialised. Set LLM_PROVIDER=gemini and add "

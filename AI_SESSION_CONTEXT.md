@@ -35,7 +35,7 @@ Constraints in databases/graph/seed.cypher
 
 See `databases/relational/queries.py` and `databases/graph/queries.py`.
 
-**Task 4 extension:** `query_schedule_seat_occupancy(schedule_id, travel_date, fare_class)`
+**Task 4 extension:** `query_schedule_seat_occupancy(schedule_id, travel_date, fare_class)` — wired in `agent.py` for questions like “How many seats on NR_SCH01 on 2026-06-15?”
 
 **Policy RAG:** 50 chunks in `train-mock-data/policy_chunks.json`, seeded via `python3 skeleton/seed_vectors.py`.
 
