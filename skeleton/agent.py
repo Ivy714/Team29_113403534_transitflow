@@ -187,20 +187,41 @@ def _format_policy_docs(docs: list[dict], limit: int = 900) -> str:
     return "\n".join(lines)
 
 
-def _format_refund_delay(minutes: int) -> str:
-    """Deterministic RF005 delay compensation tiers from ``refund_policy.json``."""
+def _rf005_rule_for_delay(minutes: int) -> Optional[dict]:
+    """Return the RF005 compensation rule that applies to ``minutes`` (from JSON)."""
+    if minutes < 30:
+        return None
     for p in json.loads((DATA_DIR / "refund_policy.json").read_text(encoding="utf-8")):
         if p.get("policy_id") != "RF005":
             continue
         for rule in p.get("compensation_rules", []):
-            cond = rule.get("condition", "")
-            if 30 <= minutes < 60 and ("30" in cond or "59" in cond):
-                return f"【RF005】{cond} → {rule['compensation']}"
-            if 60 <= minutes < 120 and ("60" in cond or "119" in cond):
-                return f"【RF005】{cond} → {rule['compensation']}"
-            if minutes >= 120 and "120" in cond:
-                return f"【RF005】{cond} → {rule['compensation']}"
-    return "See RF005 for delay compensation; RF009 for natural disaster disruption."
+            rid = rule.get("rule_id", "")
+            if minutes >= 120 and rid == "RF005_R3":
+                return rule
+            if 60 <= minutes < 120 and rid == "RF005_R2":
+                return rule
+            if 30 <= minutes < 60 and rid == "RF005_R1":
+                return rule
+    return None
+
+
+def _format_refund_delay(minutes: int) -> str:
+    """Deterministic RF005 delay compensation from ``refund_policy.json`` (matches mock data)."""
+    rule = _rf005_rule_for_delay(minutes)
+    if not rule:
+        if minutes < 30:
+            return (
+                "【RF005】Delays under 30 minutes are not eligible for delay compensation "
+                "under operator-fault rules."
+            )
+        return "See RF005 for delay compensation; RF009 for natural disaster disruption."
+    claim = rule.get("how_to_claim", "Submit via app or customer service within 28 days.")
+    return (
+        f"【RF005 — {rule['rule_id']}】\n"
+        f"  Condition: {rule['condition']}\n"
+        f"  Compensation: {rule['compensation']}\n"
+        f"  How to claim: {claim}"
+    )
 
 
 def _format_route(data: dict, *, cost_mode: bool = False, child: bool = False) -> str:
@@ -396,10 +417,14 @@ def _handle_data_query(msg: str, augmented: str, email: Optional[str]) -> Option
     if m:
         delay = int(m.group(1))
     if delay is not None and any(k in lower for k in ("delay", "compensation", "延誤", "補償")):
+        # Prefer JSON tier lookup when minutes are explicit (RAG can mis-rank similar chunks).
+        answer = _format_refund_delay(delay)
+        if _rf005_rule_for_delay(delay):
+            return answer
         rag = _policy_search(f"delay compensation {delay} minutes refund policy")
         if rag:
             return _format_policy_docs(rag)
-        return _format_refund_delay(delay)
+        return answer
 
     # --- Payment status for a booking id ---
     bid = _extract_booking_id(augmented)
@@ -504,8 +529,15 @@ def _handle_data_query(msg: str, augmented: str, email: Optional[str]) -> Option
             if avoid:
                 network = "rail" if origin.startswith("NR") and dest.startswith("NR") else "auto"
                 routes = graph.query_alternative_routes(origin, dest, avoid, network=network)
+                if not routes and network == "rail":
+                    routes = graph.query_alternative_routes(
+                        origin, dest, avoid, network="auto"
+                    )
                 if not routes:
-                    return f"No alternative route {origin}→{dest} avoiding {avoid}."
+                    return (
+                        f"No alternative route {origin}→{dest} avoiding {avoid}. "
+                        f"On this network the only corridor may pass through that station."
+                    )
                 lines = [f"【Routes avoiding {avoid}】"]
                 for i, legs in enumerate(routes, 1):
                     stops = [legs[0]["from_station_id"]] + [lg["to_station_id"] for lg in legs]
