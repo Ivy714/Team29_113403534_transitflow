@@ -513,11 +513,35 @@ with gr.Blocks(title="TransitFlow", theme=gr.themes.Soft()) as demo:
     )
 
 
+def _pick_server_port(preferred: int) -> int:
+    """Return ``preferred`` if free, otherwise the next free port in 7860–7870."""
+    import socket
+
+    def _free(p: int) -> bool:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind(("127.0.0.1", p))
+                return True
+            except OSError:
+                return False
+
+    if _free(preferred):
+        return preferred
+    for p in range(preferred + 1, preferred + 11):
+        if _free(p):
+            print(f"⚠️  Port {preferred} is in use — using {p} instead.")
+            return p
+    raise OSError(f"No free port found near {preferred}. Stop other UI instances or set GRADIO_SERVER_PORT.")
+
+
 if __name__ == "__main__":
     import os
 
-    # Use 127.0.0.1 to avoid macOS localhost binding issues; override port if 7860 is busy.
-    port = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
+    # 127.0.0.1 avoids some macOS localhost issues; GRADIO_SERVER_PORT overrides default.
+    preferred = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
+    port = _pick_server_port(preferred)
+    print(f"Open http://127.0.0.1:{port}")
     demo.launch(
         server_name="127.0.0.1",
         server_port=port,
