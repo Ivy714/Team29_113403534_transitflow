@@ -450,25 +450,31 @@ def _handle_data_query(
                 rows, origin, dest, child
             ), "db=postgres:query_national_rail_availability"
 
-        # Metro schedule query
-        if (
-            origin.startswith("MS")
-            and dest.startswith("MS")
-            and any(k in lower for k in ("metro", "train", "schedule", "班次"))
-        ):
-            rows = query_metro_schedules(origin, dest)
-            return _format_metro_schedules(
-                rows, origin, dest
-            ), "db=postgres:query_metro_schedules"
-
-        # Cross-network routing
+        # Cross-network routing (must come before same-network branches)
         origin_is_metro = origin.startswith("MS")
         dest_is_metro = dest.startswith("MS")
         if origin_is_metro != dest_is_metro:
             data = graph.query_interchange_path(origin, dest)
             return _format_route(data, child=child), "db=neo4j:query_interchange_path"
 
-        # Fare / cheapest
+        # Fastest / shortest route — Neo4j, not schedule lookup
+        if any(
+            k in lower
+            for k in (
+                "fastest",
+                "quickest",
+                "shortest",
+                "route",
+                "get from",
+                "how do i get",
+                "how to get",
+                "最快",
+            )
+        ):
+            data = graph.query_shortest_route(origin, dest)
+            return _format_route(data, child=child), "db=neo4j:query_shortest_route"
+
+        # Fare / cheapest — Neo4j
         if any(
             k in lower
             for k in (
@@ -477,9 +483,9 @@ def _handle_data_query(
                 "cost",
                 "cheap",
                 "cheapest",
-                "票價",
                 "多少錢",
                 "便宜",
+                "票價",
             )
         ):
             data = graph.query_cheapest_route(origin, dest)
@@ -487,23 +493,28 @@ def _handle_data_query(
                 data, cost_mode=True, child=child
             ), "db=neo4j:query_cheapest_route"
 
-        # Fastest / default routing
-        if any(
-            k in lower
-            for k in (
-                "fastest",
-                "quickest",
-                "shortest",
-                "最快",
-                "route",
-                "get from",
-                "how do i get",
+        # Metro schedule lookup (only when explicitly asking about timetables)
+        if (
+            origin.startswith("MS")
+            and dest.startswith("MS")
+            and any(
+                k in lower
+                for k in (
+                    "schedule",
+                    "timetable",
+                    "first train",
+                    "last train",
+                    "班次",
+                    "時刻",
+                )
             )
         ):
-            data = graph.query_shortest_route(origin, dest)
-            return _format_route(data, child=child), "db=neo4j:query_shortest_route"
+            rows = query_metro_schedules(origin, dest)
+            return _format_metro_schedules(
+                rows, origin, dest
+            ), "db=postgres:query_metro_schedules"
 
-        # Default: shortest route
+        # Default: shortest route via Neo4j
         data = graph.query_shortest_route(origin, dest)
         return _format_route(data, child=child), "db=neo4j:query_shortest_route"
 
