@@ -115,83 +115,104 @@ def query_station_connections(station_id: str) -> list[dict]: ...
 ## Team Decisions Log
 
 <!-- Add entries as you make decisions. Format: "Decision: X. Why: Y." -->
-
-- [ ] Decision: PostgreSQL schema 分為 relational schema 與 vector schema。Why: Relational schema 儲存結構化交通與交易資料；vector schema 的 `policy_documents` 供 RAG / Help Desk semantic search 使用。
-- [ ] Decision: Graph routing / adjacency / closures 不放在 PostgreSQL。Why: `schema.sql` 明確註記 graph routing、adjacency、closures 由 Neo4j 負責。
-- [ ] Decision: Policy text / semantic Q&A 不放在一般 relational tables。Why: `schema.sql` 明確註記 policy semantic Q&A 由 pgvector 的 `policy_documents` 負責。
-- [ ] Decision: 使用 ENUM 限制固定欄位值。Why: `network_type`、`service_type`、`fare_class`、`ticket_type`、`journey_status`、`payment_method`、`payment_status`、`day_of_week` 都有固定合法值。
-- [ ] Decision: 使用 `users`、`user_credentials`、`user_security_questions` 分離使用者基本資料、密碼資料與安全問題。Why: 密碼與安全問題答案以 hash / salt 儲存，避免直接放在 `users` table。
-- [ ] Decision: Metro 與 National Rail stations 分成 `metro_stations` 與 `national_rail_stations`。Why: 兩個 network 有不同 station metadata，且互相轉乘欄位透過 foreign key 連結。
-- [ ] Decision: Station line membership 拆成 `metro_station_lines` 與 `national_rail_station_lines`。Why: 一個 station 可能屬於多條 line，因此以獨立 table 表示多對多關係。
-- [ ] Decision: Metro 與 National Rail schedules 分成 `metro_schedules` 與 `national_rail_schedules`。Why: National Rail 有 `service_type` 與 fare class；Metro 使用固定 base fare / per-stop rate。
-- [ ] Decision: National Rail fare 拆成 `national_rail_schedule_fares`。Why: 同一 schedule 依 `fare_class` 有不同 `base_fare_usd` 與 `per_stop_rate_usd`。
-- [ ] Decision: Schedule stops 使用 `metro_schedule_stops` 與 `national_rail_schedule_stops` 儲存停靠順序。Why: 可用 `stop_order` 與 `travel_time_from_origin_min` 計算路徑與 travel time。
-- [ ] Decision: National Rail schedule stops 使用 `is_stopping`。Why: Express service 可能經過但不停靠部分 stations。
-- [ ] Decision: National Rail seat data 使用 `seat_layouts`、`coaches`、`seats` 三層設計。Why: 可依 schedule、coach、fare class 與 seat_id 管理座位。
-- [ ] Decision: 使用 `journeys` 作為 National Rail bookings 與 Metro trips 的共同父層資料表。Why: `payments` 與 `feedback` 可以用真正的 foreign key 統一參照 `journeys(journey_id)`。
-- [ ] Decision: National Rail booking 儲存在 `bookings`。Why: National Rail 支援 advance booking、fare class、coach、seat_id、travel_date 與 departure_time。
-- [ ] Decision: Metro trip 儲存在 `metro_trips`。Why: Metro 使用 same-day trip / tap-in travel model，並支援 `day_pass_ref` 表示 day pass 後續搭乘紀錄。
-- [ ] Decision: `payments` 使用 `journey_id` 連到 `journeys`。Why: 同一套 payment schema 可同時支援 National Rail bookings 與 Metro trips。
-- [ ] Decision: `feedback` 使用 `journey_id` 與 `user_id`，並限制 `(journey_id, user_id)` 唯一。Why: 同一使用者對同一趟 journey 只能留下一次 feedback。
-- [ ] Decision: Neo4j 使用 `MetroStation` 與 `NationalRailStation` 作為 node labels。Why: Metro 與 National Rail 是不同 network，但可透過 interchange relationship 連接。
-- [ ] Decision: Neo4j 使用 `METRO_LINK`、`RAIL_LINK`、`INTERCHANGE_TO` 作為 relationship types。Why: 可清楚區分 Metro 連線、Rail 連線與跨 network 轉乘。
-- [ ] Decision: Neo4j `station_id` 加上 unique constraints。Why: `seed.cypher` 定義 `MetroStation.station_id` 與 `NationalRailStation.station_id` 必須唯一。
+- [x] National rail direction: filter with `o_stop.stop_order < d_stop.stop_order` (do not list reverse-direction trains).
+- [x] Express pass-through stations: `is_stopping = FALSE`, high `stop_order` (999+) in `national_rail_schedule_stops`.
+- [x] - [x] Policy RAG: pre-chunked `policy_chunks.json`, not raw JSON at query time.
+- [x] Agent: rule-based handlers first; LLM fallback only when no DB match.
+- [x] Cross-network routing: `query_interchange_path` for “how do I get” MS↔NR; `query_shortest_route` for same-network / fare.
+- [x] PostgreSQL stores structured transit, booking, payment, feedback, and user data.
+- [x] Neo4j is responsible for routing, station connectivity, interchange analysis, and shortest-path queries.
+- [x] pgvector policy_documents is used for policy semantic search and RAG retrieval.
+- [x] Policy documents are pre-processed into policy_chunks.json before embedding generation and vector storage.
+- [x] Policy RAG uses booking_rules.json, refund_policy.json, ticket_types.json, and travel_policies.json as authoritative policy sources.
+- [x] Metro and National Rail remain separate transport networks with dedicated schedules, fares, and operating rules.
 
 ## Prompts That Worked
 
 <!-- Share prompts that produced good output so teammates can reuse them. -->
 
-### Schema design prompt that worked:
-```
-請根據本專案的 train-mock-data JSON 檔案與 TransitFlow 需求，設計 PostgreSQL relational schema。
+### Schema Design Prompt
 
-請特別處理：
-1. 使用者、認證資料與安全問題
-2. Metro stations / National Rail stations
-3. Metro schedules / National Rail schedules
-4. Schedule stops 與 operates_on
+```
+Design a PostgreSQL relational schema for the TransitFlow project based on the train-mock-data JSON files.
+
+Please address:
+
+1. Users, user_credentials, authentication data, and user_security_questions
+2. Metro stations and National Rail stations
+3. Metro schedules and National Rail schedules
+4. Schedule stops and operating days
 5. National Rail fare classes
-6. National Rail seat layouts、coaches、seats
-7. National Rail bookings 與 Metro trips
-8. Payments 與 feedback 如何同時支援兩種 journey
-9. pgvector policy_documents 保留不修改
-10. primary keys、foreign keys、constraints、indexes、views
+6. National Rail seat layouts, coaches, and seats
+7. National Rail bookings and Metro trips
+8. How payments and feedback support both journey types
+9. Preserve the pgvector policy_documents table
+10. Primary keys, foreign keys, constraints, indexes, and views
 ```
 
-### Query implementation prompt that worked:
-```
-請根據 AI_SESSION_CONTEXT.md 與 schema.sql，實作 databases/relational/queries.py 中的指定 function。
+### Relational Query Implementation Prompt
 
-要求：
-1. function signature 必須完全符合 AI_SESSION_CONTEXT.md
-2. 使用 _connect() helper
-3. 使用 psycopg2.extras.RealDictCursor
-4. 所有 SQL user inputs 必須使用 %s placeholders
-5. read-only function 找不到資料時回傳 [] 或 None，不要 raise exception
-6. 回傳格式必須符合 docstring 與 agent.py tool calling 需求
-請根據 AI_SESSION_CONTEXT.md 與 seed.cypher，實作 databases/graph/queries.py 中的指定 function。
+```
+Implement query_national_rail_availability using _connect() and RealDictCursor.
+
+Requirements:
+- Require origin stop_order < destination stop_order on national_rail_schedule_stops
+- Do not return reverse-direction services
 ```
 
-### Graph query implementation prompt that worked:
 ```
-要求：
-1. function signature 必須完全符合 AI_SESSION_CONTEXT.md
-2. 使用 _driver() helper 與 Neo4j session
-3. Graph node labels 使用 MetroStation、NationalRailStation
-4. Relationship types 使用 METRO_LINK、RAIL_LINK、INTERCHANGE_TO
-5. 支援 shortest route、cheapest route、alternative routes、interchange path、delay ripple、station connections
-6. 找不到路徑時回傳清楚的 dict 或空 list
+Implement the required functions in databases/relational/queries.py based on AI_SESSION_CONTEXT.md and schema.sql.
+
+Requirements:
+
+1. Function signatures must exactly match AI_SESSION_CONTEXT.md
+2. Use the _connect() helper
+3. Use psycopg2.extras.RealDictCursor
+4. All SQL user inputs must use %s placeholders
+5. Read-only functions should return [] or None when no data is found
+6. Return values must match the docstrings and agent.py tool-calling requirements
 ```
 
-### RAG policy chunk prompt that worked:
+### Graph Query Implementation Prompt
 ```
-請根據 booking_rules.json、refund_policy.json、travel_policies.json、ticket_types.json，產生可匯入 pgvector 的 policy_chunks.json。
+Implement the required functions in databases/graph/queries.py based on AI_SESSION_CONTEXT.md and seed.cypher.
 
-要求：
-1. chunk_id 必須唯一且可追溯來源，例如 RF001_W1、BR_NATIONAL_RAIL_ADVANCE_BOOKING
-2. 每個 chunk 要包含 title、category、document_type、policy_id、content、metadata、source_file
-3. content 必須用自然語言整理，方便 semantic search 回答使用者問題
-4. metadata 必須保留 network_type、ticket_type、service_type、fare_class、refund_percent、time_window 等可過濾欄位
-5. 不要修改 PostgreSQL 的 policy_documents schema
-6. 輸出格式必須能被 seed_vectors.py 讀取並寫入 pgvector
+Requirements:
+
+1. Function signatures must exactly match AI_SESSION_CONTEXT.md
+2. Use the _driver() helper and Neo4j sessions
+3. Use MetroStation and NationalRailStation as node labels
+4. Use METRO_LINK, RAIL_LINK, and INTERCHANGE_TO as relationship types
+5. Support shortest routes, cheapest routes, alternative routes, interchange paths, delay ripple analysis, and station connectivity queries
+6. Return a clear result object or an empty list when no route exists
+```
+
+### RAG Policy Chunk Prompt
+```
+Generate a pgvector-ready policy_chunks.json from:
+
+- booking_rules.json
+- refund_policy.json
+- travel_policies.json
+- ticket_types.json
+
+Requirements:
+
+1. Each chunk should represent a single policy topic
+2. Each chunk must have a unique chunk_id
+3. Preserve relevant policy metadata
+4. Rewrite content into natural language suitable for semantic search
+5. Optimize content for RAG retrieval
+6. Output must be compatible with seed_vectors.py
+```
+
+### Policy Vector Seeding Prompt
+```
+After updating policy_chunks.json:
+
+python3 skeleton/seed_vectors.py
+
+Ensure the embedding model is available:
+
+ollama pull nomic-embed-text
 ```
