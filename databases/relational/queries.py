@@ -785,9 +785,16 @@ def register_user(
                 return False, f"Email {email} is already registered."
 
             # Generate a sequential user_id (e.g. RU01, RU02...)
-            cur.execute("SELECT COUNT(*) FROM users")
-            count = cur.fetchone()[0]
-            user_id = f"RU{count + 1:02d}"
+            cur.execute("""
+                SELECT COALESCE(
+                    MAX(CAST(SUBSTRING(user_id FROM 3) AS INTEGER)),
+                    0
+                )
+                FROM users
+                WHERE user_id LIKE 'RU%'
+            """)
+            max_user_num = cur.fetchone()[0]
+            user_id = f"RU{max_user_num + 1:02d}"
 
             # Insert the core user profile row
             registered_at = datetime.now(timezone.utc)
@@ -816,9 +823,16 @@ def register_user(
             # Hash the secret answer the same way; store case-folded so verification
             # is case-insensitive without storing the raw answer.
             sq_hash = _hash_password(secret_answer.lower())
-            cur.execute("SELECT COUNT(*) FROM user_security_questions")
-            sq_count = cur.fetchone()[0]
-            sq_id = f"SQ{sq_count + 1:03d}"
+            cur.execute("""
+                SELECT COALESCE(
+                    MAX(CAST(SUBSTRING(security_question_id FROM 3) AS INTEGER)),
+                    0
+                )
+                FROM user_security_questions
+                WHERE security_question_id LIKE 'SQ%'
+            """)
+            max_sq_num = cur.fetchone()[0]
+            sq_id = f"SQ{max_sq_num + 1:03d}"
             cur.execute(
                 """
                 INSERT INTO user_security_questions

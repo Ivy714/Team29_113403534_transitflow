@@ -182,6 +182,7 @@ ALTER TABLE metro_stations
     ADD CONSTRAINT fk_metro_interchange_nr
     FOREIGN KEY (interchange_national_rail_station_id)
     REFERENCES national_rail_stations(station_id)
+    ON DELETE RESTRICT
     DEFERRABLE INITIALLY DEFERRED;
 
 -- Cross-network FK: national rail station → metro station.
@@ -189,6 +190,7 @@ ALTER TABLE national_rail_stations
     ADD CONSTRAINT fk_nr_interchange_metro
     FOREIGN KEY (interchange_metro_station_id)
     REFERENCES metro_stations(station_id)
+    ON DELETE RESTRICT
     DEFERRABLE INITIALLY DEFERRED;
 
 -- Ensures that if is_interchange_national_rail is FALSE, the FK column must be NULL.
@@ -252,8 +254,8 @@ CREATE TABLE metro_schedules (
     schedule_id             VARCHAR(20)   PRIMARY KEY,
     line                    VARCHAR(5)    NOT NULL CHECK (line IN ('M1', 'M2', 'M3', 'M4')),
     direction               VARCHAR(20)   NOT NULL,
-    origin_station_id       VARCHAR(10)   NOT NULL REFERENCES metro_stations(station_id),
-    destination_station_id  VARCHAR(10)   NOT NULL REFERENCES metro_stations(station_id),
+    origin_station_id       VARCHAR(10)   NOT NULL REFERENCES metro_stations(station_id) ON DELETE RESTRICT,
+    destination_station_id  VARCHAR(10)   NOT NULL REFERENCES metro_stations(station_id) ON DELETE RESTRICT,
     first_train_time        TIME          NOT NULL,
     last_train_time         TIME          NOT NULL,
     frequency_min           INTEGER       NOT NULL CHECK (frequency_min > 0),
@@ -268,8 +270,8 @@ CREATE TABLE national_rail_schedules (
     line                    VARCHAR(5)    NOT NULL CHECK (line IN ('NR1', 'NR2')),
     service_type            service_type  NOT NULL,
     direction               VARCHAR(20)   NOT NULL,
-    origin_station_id       VARCHAR(10)   NOT NULL REFERENCES national_rail_stations(station_id),
-    destination_station_id  VARCHAR(10)   NOT NULL REFERENCES national_rail_stations(station_id),
+    origin_station_id       VARCHAR(10)   NOT NULL REFERENCES national_rail_stations(station_id) ON DELETE RESTRICT,
+    destination_station_id  VARCHAR(10)   NOT NULL REFERENCES national_rail_stations(station_id) ON DELETE RESTRICT,
     first_train_time        TIME          NOT NULL,
     last_train_time         TIME          NOT NULL,
     frequency_min           INTEGER       NOT NULL CHECK (frequency_min > 0),
@@ -306,7 +308,7 @@ CREATE TABLE national_rail_schedule_fares (
 -- UNIQUE (schedule_id, station_id) prevents a station appearing twice on one route.
 CREATE TABLE metro_schedule_stops (
     schedule_id                   VARCHAR(20)  NOT NULL REFERENCES metro_schedules(schedule_id) ON DELETE CASCADE,
-    station_id                    VARCHAR(10)  NOT NULL REFERENCES metro_stations(station_id),
+    station_id                    VARCHAR(10)  NOT NULL REFERENCES metro_stations(station_id) ON DELETE RESTRICT,
     stop_order                    INTEGER      NOT NULL CHECK (stop_order > 0),
     travel_time_from_origin_min   INTEGER      NOT NULL CHECK (travel_time_from_origin_min >= -1),
     PRIMARY KEY (schedule_id, stop_order),
@@ -316,7 +318,7 @@ CREATE TABLE metro_schedule_stops (
 -- Same structure as metro but includes is_stopping for express pass-through logic.
 CREATE TABLE national_rail_schedule_stops (
     schedule_id                   VARCHAR(20)  NOT NULL REFERENCES national_rail_schedules(schedule_id) ON DELETE CASCADE,
-    station_id                    VARCHAR(10)  NOT NULL REFERENCES national_rail_stations(station_id),
+    station_id                    VARCHAR(10)  NOT NULL REFERENCES national_rail_stations(station_id) ON DELETE RESTRICT,
     stop_order                    INTEGER      NOT NULL CHECK (stop_order > 0),
     travel_time_from_origin_min   INTEGER      NOT NULL CHECK (travel_time_from_origin_min >= -1),
     is_stopping                   BOOLEAN      NOT NULL DEFAULT TRUE,
@@ -436,8 +438,8 @@ CREATE TABLE ticket_type_networks (
 CREATE TABLE journeys (
     journey_id   VARCHAR(20)     PRIMARY KEY,
     network      network_type    NOT NULL,
-    user_id      VARCHAR(10)     NOT NULL REFERENCES users(user_id),
-    ticket_type  ticket_type NOT NULL REFERENCES ticket_types(ticket_type),
+    user_id      VARCHAR(10)     NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
+    ticket_type  ticket_type NOT NULL REFERENCES ticket_types(ticket_type) ON DELETE RESTRICT,
     amount_usd   NUMERIC(8,2)    NOT NULL CHECK (amount_usd >= 0),
     status       journey_status  NOT NULL,
     CHECK (
@@ -464,9 +466,9 @@ CREATE TABLE journeys (
 
 CREATE TABLE bookings (
     booking_id              VARCHAR(20)     PRIMARY KEY REFERENCES journeys(journey_id) ON DELETE CASCADE,
-    schedule_id             VARCHAR(20)     NOT NULL REFERENCES national_rail_schedules(schedule_id),
-    origin_station_id       VARCHAR(10)     NOT NULL REFERENCES national_rail_stations(station_id),
-    destination_station_id  VARCHAR(10)     NOT NULL REFERENCES national_rail_stations(station_id),
+    schedule_id             VARCHAR(20)     NOT NULL REFERENCES national_rail_schedules(schedule_id) ON DELETE RESTRICT,
+    origin_station_id       VARCHAR(10)     NOT NULL REFERENCES national_rail_stations(station_id) ON DELETE RESTRICT,
+    destination_station_id  VARCHAR(10)     NOT NULL REFERENCES national_rail_stations(station_id) ON DELETE RESTRICT,
     travel_date             DATE            NOT NULL,
     departure_time          TIME            NOT NULL,
     fare_class              fare_class NOT NULL,
@@ -476,7 +478,7 @@ CREATE TABLE bookings (
     stops_travelled         INTEGER         NOT NULL CHECK (stops_travelled > 0),
     booked_at               TIMESTAMPTZ     NOT NULL,
     travelled_at            TIMESTAMPTZ,
-    FOREIGN KEY (layout_id, coach, seat_id) REFERENCES seats(layout_id, coach, seat_id),
+    FOREIGN KEY (layout_id, coach, seat_id) REFERENCES seats(layout_id, coach, seat_id) ON DELETE RESTRICT,
     UNIQUE (schedule_id, travel_date, departure_time, coach, seat_id),
     CHECK (origin_station_id <> destination_station_id),
     CHECK (travelled_at IS NULL OR travelled_at::date >= travel_date)
@@ -498,9 +500,9 @@ CREATE TABLE bookings (
 
 CREATE TABLE metro_trips (
     trip_id                 VARCHAR(20)  PRIMARY KEY REFERENCES journeys(journey_id) ON DELETE CASCADE,
-    schedule_id             VARCHAR(20)  NOT NULL REFERENCES metro_schedules(schedule_id),
-    origin_station_id       VARCHAR(10)  NOT NULL REFERENCES metro_stations(station_id),
-    destination_station_id  VARCHAR(10)  NOT NULL REFERENCES metro_stations(station_id),
+    schedule_id             VARCHAR(20)  NOT NULL REFERENCES metro_schedules(schedule_id) ON DELETE RESTRICT,
+    origin_station_id       VARCHAR(10)  NOT NULL REFERENCES metro_stations(station_id) ON DELETE RESTRICT,
+    destination_station_id  VARCHAR(10)  NOT NULL REFERENCES metro_stations(station_id) ON DELETE RESTRICT,
     travel_date             DATE         NOT NULL,
     day_pass_ref            VARCHAR(20) REFERENCES journeys(journey_id) ON DELETE SET NULL,
     stops_travelled         INTEGER      CHECK (stops_travelled IS NULL OR stops_travelled > 0),
@@ -528,7 +530,7 @@ CREATE TABLE metro_trips (
 
 CREATE TABLE payments (
     payment_id  VARCHAR(20)     PRIMARY KEY,
-    journey_id  VARCHAR(20)     NOT NULL REFERENCES journeys(journey_id),
+    journey_id  VARCHAR(20)     NOT NULL REFERENCES journeys(journey_id) ON DELETE RESTRICT,
     amount_usd  NUMERIC(8,2)    NOT NULL CHECK (amount_usd >= 0),
     method      payment_method  NOT NULL,
     status      payment_status  NOT NULL,
@@ -549,8 +551,8 @@ CREATE TABLE payments (
 
 CREATE TABLE feedback (
     feedback_id   VARCHAR(20)  PRIMARY KEY,
-    journey_id    VARCHAR(20)  NOT NULL REFERENCES journeys(journey_id),
-    user_id       VARCHAR(10)  NOT NULL REFERENCES users(user_id),
+    journey_id    VARCHAR(20)  NOT NULL REFERENCES journeys(journey_id) ON DELETE RESTRICT,
+    user_id       VARCHAR(10)  NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
     rating        INTEGER      NOT NULL CHECK (rating BETWEEN 1 AND 5),
     comment       TEXT,
     submitted_at  TIMESTAMPTZ  NOT NULL,
