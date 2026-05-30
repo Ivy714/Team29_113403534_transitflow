@@ -182,7 +182,7 @@ ALTER TABLE metro_stations
     ADD CONSTRAINT fk_metro_interchange_nr
     FOREIGN KEY (interchange_national_rail_station_id)
     REFERENCES national_rail_stations(station_id)
-    ON DELETE RESTRICT
+    ON DELETE SET NULL
     DEFERRABLE INITIALLY DEFERRED;
 
 -- Cross-network FK: national rail station → metro station.
@@ -190,7 +190,7 @@ ALTER TABLE national_rail_stations
     ADD CONSTRAINT fk_nr_interchange_metro
     FOREIGN KEY (interchange_metro_station_id)
     REFERENCES metro_stations(station_id)
-    ON DELETE RESTRICT
+    ON DELETE SET NULL
     DEFERRABLE INITIALLY DEFERRED;
 
 -- Ensures that if is_interchange_national_rail is FALSE, the FK column must be NULL.

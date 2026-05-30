@@ -11,6 +11,7 @@ TWO ROLES ARE SERVED HERE:
 
 from __future__ import annotations
 
+import json
 import random
 import string
 from datetime import datetime, timezone
@@ -605,6 +606,7 @@ def execute_booking(
 
             return True, {
                 "booking_id": booking_id,
+                "user_id": user_id,
                 "payment_id": payment_id,
                 "schedule_id": schedule_id,
                 "origin_station_id": origin_station_id,
@@ -749,6 +751,7 @@ def execute_cancellation(booking_id: str, user_id: str) -> tuple[bool, dict | st
             return True, {
                 "booking_id": booking_id,
                 "original_amount_usd": amount,
+                "refund_amount": refund_amount,
                 "refund_amount_usd": refund_amount,
                 "admin_fee_usd": admin_fee,
                 "policy_note": note,
@@ -1002,17 +1005,46 @@ def store_policy_document(
     content: str,
     embedding: list[float],
     source_file: str = "",
+    chunk_id: str | None = None,
+    document_type: str | None = None,
+    policy_id: str | None = None,
+    metadata: dict | None = None,
 ) -> int:
-    """Insert a policy document with its embedding into the database."""
+    """Insert or update a policy document with its embedding into the database."""
     sql = """
-        INSERT INTO policy_documents (title, category, content, embedding, source_file)
-        VALUES (%s, %s, %s, %s::vector, %s)
+        INSERT INTO policy_documents
+            (chunk_id, title, category, document_type, policy_id, content, metadata, embedding, source_file)
+        VALUES
+            (%s, %s, %s, %s, %s, %s, %s, %s::vector, %s)
+        ON CONFLICT (chunk_id) DO UPDATE SET
+            title = EXCLUDED.title,
+            category = EXCLUDED.category,
+            document_type = EXCLUDED.document_type,
+            policy_id = EXCLUDED.policy_id,
+            content = EXCLUDED.content,
+            metadata = EXCLUDED.metadata,
+            embedding = EXCLUDED.embedding,
+            source_file = EXCLUDED.source_file
         RETURNING id
     """
     vec_str = "[" + ",".join(str(x) for x in embedding) + "]"
+
     with _connect() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (title, category, content, vec_str, source_file))
+            cur.execute(
+                sql,
+                (
+                    chunk_id,
+                    title,
+                    category,
+                    document_type,
+                    policy_id,
+                    content,
+                    json.dumps(metadata or {}),
+                    vec_str,
+                    source_file,
+                ),
+            )
             return cur.fetchone()[0]
 
 
