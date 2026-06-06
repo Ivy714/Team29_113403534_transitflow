@@ -66,8 +66,12 @@ def agent_ok(msg: str, check, email: str | None = None) -> None:
 def pick_open_travel_date(email: str, origin: str, dest: str) -> str:
     """Return a date with no confirmed booking for the same route (idempotent tests)."""
     existing = pg.query_user_bookings(email)
+
+    def _iso(d) -> str:
+        return d.isoformat() if hasattr(d, "isoformat") else str(d)
+
     taken = {
-        str(b["travel_date"])
+        _iso(b["travel_date"])
         for b in existing["national_rail"]
         if b.get("origin_station_id") == origin
         and b.get("destination_station_id") == dest

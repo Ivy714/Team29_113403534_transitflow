@@ -351,6 +351,8 @@ def query_user_bookings(user_email: str) -> dict:
             j.amount_usd,
             j.status,
             b.schedule_id,
+            b.origin_station_id,
+            b.destination_station_id,
             s.line,
             s.service_type,
             o_st.name   AS origin_name,
