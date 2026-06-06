@@ -1,79 +1,5 @@
 [
   {
-    "chunk_id": "refund_policy_RF001",
-    "source_file": "refund_policy.json",
-    "document_type": "refund_policy",
-    "title": "National Rail – Normal Service – Single or Return",
-    "content": "National Rail normal-service single and return tickets are refundable based on how early the passenger cancels. If cancellation is requested 48 or more hours before scheduled departure, the refund is 100% with no admin fee. If cancellation is requested 24 to 48 hours before departure, the refund is 75% with a $0.50 admin fee. If cancellation is requested 2 to 24 hours before departure, the refund is 50% with a $0.50 admin fee. If cancellation is requested less than 2 hours before departure, or after departure has passed, no refund is issued. For return tickets, each leg is assessed separately. If the outbound leg has already been travelled, only the return leg may be eligible for refund. No-shows are not refunded.",
-    "metadata": {
-      "policy_id": "RF001",
-      "label": "National Rail – Normal Service – Single or Return",
-      "network_type": "national_rail",
-      "service_type": "normal",
-      "topic": "refund_policy",
-      "json_path": "$[?(@.policy_id==\"RF001\")]",
-      "rule_ids": [
-        "RF001_W1",
-        "RF001_W2",
-        "RF001_W3",
-        "RF001_W4"
-      ],
-      "refund_percent_options": [
-        0,
-        50,
-        75,
-        100
-      ],
-      "admin_fee_usd_options": [
-        0.0,
-        0.5
-      ],
-      "related_policy_ids": [
-        "RF001"
-      ],
-      "ticket_type": [
-        "single",
-        "return"
-      ]
-    }
-  },
-  {
-    "chunk_id": "refund_policy_RF002",
-    "source_file": "refund_policy.json",
-    "document_type": "refund_policy",
-    "title": "National Rail – Express Service – Single or Return",
-    "content": "National Rail express-service single and return tickets are refundable based on how early the passenger cancels. If cancellation is requested 48 or more hours before scheduled departure, the refund is 100% with a $1.00 admin fee. If cancellation is requested 24 to 48 hours before departure, the refund is 50% with a $1.00 admin fee. If cancellation is requested less than 24 hours before departure, or after departure has passed, no refund is issued. For return tickets, each leg is assessed separately. No-shows on express services are not refunded.",
-    "metadata": {
-      "policy_id": "RF002",
-      "label": "National Rail – Express Service – Single or Return",
-      "network_type": "national_rail",
-      "service_type": "express",
-      "topic": "refund_policy",
-      "json_path": "$[?(@.policy_id==\"RF002\")]",
-      "rule_ids": [
-        "RF002_W1",
-        "RF002_W2",
-        "RF002_W3"
-      ],
-      "refund_percent_options": [
-        0,
-        50,
-        100
-      ],
-      "admin_fee_usd_options": [
-        0.0,
-        1.0
-      ],
-      "related_policy_ids": [
-        "RF002"
-      ],
-      "ticket_type": [
-        "single",
-        "return"
-      ]
-    }
-  },
-  {
     "chunk_id": "refund_policy_RF003",
     "source_file": "refund_policy.json",
     "document_type": "refund_policy",
@@ -138,11 +64,299 @@
     }
   },
   {
+    "chunk_id": "refund_policy_RF001_W1",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Normal Service – Single or Return - RF001_W1",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail normal service single or return ticket 48 hours or more before scheduled departure, the passenger is entitled to a 100% refund with no admin fee. This is rule RF001_W1 under National Rail – Normal Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF001",
+      "label": "National Rail – Normal Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "normal",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF001\")].cancellation_windows[?(@.window_id==\"RF001_W1\")]",
+      "rule_id": "RF001_W1",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 48,
+      "hours_before_departure_max": null,
+      "refund_percent": 100,
+      "admin_fee_usd": 0.0,
+      "related_policy_ids": [
+        "RF001"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF001_W2",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Normal Service – Single or Return - RF001_W2",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail normal service single or return ticket between 24 and 48 hours before scheduled departure, the passenger is entitled to a 75% refund minus a $0.50 admin fee. This is rule RF001_W2 under National Rail – Normal Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF001",
+      "label": "National Rail – Normal Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "normal",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF001\")].cancellation_windows[?(@.window_id==\"RF001_W2\")]",
+      "rule_id": "RF001_W2",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 24,
+      "hours_before_departure_max": 48,
+      "refund_percent": 75,
+      "admin_fee_usd": 0.5,
+      "related_policy_ids": [
+        "RF001"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF001_W3",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Normal Service – Single or Return - RF001_W3",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail normal service single or return ticket between 2 and 24 hours before scheduled departure, the passenger is entitled to a 50% refund minus a $0.50 admin fee. This is rule RF001_W3 under National Rail – Normal Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF001",
+      "label": "National Rail – Normal Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "normal",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF001\")].cancellation_windows[?(@.window_id==\"RF001_W3\")]",
+      "rule_id": "RF001_W3",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 2,
+      "hours_before_departure_max": 24,
+      "refund_percent": 50,
+      "admin_fee_usd": 0.5,
+      "related_policy_ids": [
+        "RF001"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF001_W4",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Normal Service – Single or Return - RF001_W4",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail normal service single or return ticket between 0 and 2 hours before scheduled departure, no refund is issued. This is rule RF001_W4 under National Rail – Normal Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF001",
+      "label": "National Rail – Normal Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "normal",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF001\")].cancellation_windows[?(@.window_id==\"RF001_W4\")]",
+      "rule_id": "RF001_W4",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 0,
+      "hours_before_departure_max": 2,
+      "refund_percent": 0,
+      "admin_fee_usd": 0.0,
+      "related_policy_ids": [
+        "RF001"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF001_return_ticket_notes",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_note",
+    "title": "National Rail – Normal Service – Single or Return - return ticket notes",
+    "content": "National Rail – Normal Service – Single or Return note. For return tickets, each leg is assessed independently. If the outbound leg has already been travelled, only the return leg amount is eligible for refund, assessed against the return departure time. Use this chunk together with the matching cancellation refund rule when the user asks about return tickets, used outbound legs, unused return legs, no-shows, or cancellation exceptions. This note supports natural-language answers about how refunds are assessed.",
+    "metadata": {
+      "policy_id": "RF001",
+      "label": "National Rail – Normal Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "normal",
+      "topic": "return_ticket_refund_notes",
+      "json_path": "$[?(@.policy_id==\"RF001\")].return_ticket_notes",
+      "related_policy_ids": [
+        "RF001"
+      ],
+      "rule_type": "return_ticket_refund_notes",
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF001_no_show_policy",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_note",
+    "title": "National Rail – Normal Service – Single or Return - no show policy",
+    "content": "National Rail – Normal Service – Single or Return note. Passengers who do not travel and do not cancel in advance are treated as a no-show. No refund is issued for no-shows. Use this chunk together with the matching cancellation refund rule when the user asks about return tickets, used outbound legs, unused return legs, no-shows, or cancellation exceptions. This note supports natural-language answers about how refunds are assessed.",
+    "metadata": {
+      "policy_id": "RF001",
+      "label": "National Rail – Normal Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "normal",
+      "topic": "no_show_refund_policy",
+      "json_path": "$[?(@.policy_id==\"RF001\")].no_show_policy",
+      "related_policy_ids": [
+        "RF001"
+      ],
+      "rule_type": "no_show_refund_policy",
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF002_W1",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Express Service – Single or Return - RF002_W1",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail express service single or return ticket 48 hours or more before scheduled departure, the passenger is entitled to a 100% refund minus a $1.00 admin fee. This is rule RF002_W1 under National Rail – Express Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF002",
+      "label": "National Rail – Express Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "express",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF002\")].cancellation_windows[?(@.window_id==\"RF002_W1\")]",
+      "rule_id": "RF002_W1",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 48,
+      "hours_before_departure_max": null,
+      "refund_percent": 100,
+      "admin_fee_usd": 1.0,
+      "related_policy_ids": [
+        "RF002"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF002_W2",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Express Service – Single or Return - RF002_W2",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail express service single or return ticket between 24 and 48 hours before scheduled departure, the passenger is entitled to a 50% refund minus a $1.00 admin fee. This is rule RF002_W2 under National Rail – Express Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF002",
+      "label": "National Rail – Express Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "express",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF002\")].cancellation_windows[?(@.window_id==\"RF002_W2\")]",
+      "rule_id": "RF002_W2",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 24,
+      "hours_before_departure_max": 48,
+      "refund_percent": 50,
+      "admin_fee_usd": 1.0,
+      "related_policy_ids": [
+        "RF002"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF002_W3",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Express Service – Single or Return - RF002_W3",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail express service single or return ticket between 0 and 24 hours before scheduled departure, no refund is issued. This is rule RF002_W3 under National Rail – Express Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF002",
+      "label": "National Rail – Express Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "express",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF002\")].cancellation_windows[?(@.window_id==\"RF002_W3\")]",
+      "rule_id": "RF002_W3",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 0,
+      "hours_before_departure_max": 24,
+      "refund_percent": 0,
+      "admin_fee_usd": 0.0,
+      "related_policy_ids": [
+        "RF002"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF002_return_ticket_notes",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_note",
+    "title": "National Rail – Express Service – Single or Return - return ticket notes",
+    "content": "National Rail – Express Service – Single or Return note. Same as normal service: each leg assessed independently against its own departure time. Use this chunk together with the matching cancellation refund rule when the user asks about return tickets, used outbound legs, unused return legs, no-shows, or cancellation exceptions. This note supports natural-language answers about how refunds are assessed.",
+    "metadata": {
+      "policy_id": "RF002",
+      "label": "National Rail – Express Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "express",
+      "topic": "return_ticket_refund_notes",
+      "json_path": "$[?(@.policy_id==\"RF002\")].return_ticket_notes",
+      "related_policy_ids": [
+        "RF002"
+      ],
+      "rule_type": "return_ticket_refund_notes",
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF002_no_show_policy",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_note",
+    "title": "National Rail – Express Service – Single or Return - no show policy",
+    "content": "National Rail – Express Service – Single or Return note. No refund issued for no-shows on express services. Use this chunk together with the matching cancellation refund rule when the user asks about return tickets, used outbound legs, unused return legs, no-shows, or cancellation exceptions. This note supports natural-language answers about how refunds are assessed.",
+    "metadata": {
+      "policy_id": "RF002",
+      "label": "National Rail – Express Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "express",
+      "topic": "no_show_refund_policy",
+      "json_path": "$[?(@.policy_id==\"RF002\")].no_show_policy",
+      "related_policy_ids": [
+        "RF002"
+      ],
+      "rule_type": "no_show_refund_policy",
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
     "chunk_id": "refund_policy_RF005_RF005_R1",
     "source_file": "refund_policy.json",
     "document_type": "refund_policy_rule",
     "title": "Delay Compensation – All Networks - RF005_R1",
-    "content": "Delay compensation policy. If your train is delayed 30–59 minutes due to operator fault, you are entitled to a 50% refund of the fare for the delayed leg. Submit the claim via app or customer service within 28 days of the travel date. This applies to delayed train, late train, rail delay, compensation claim, reimbursement, and money back for delay.",
+    "content": "Delay compensation policy. If a passenger’s train is delayed by 30–59 minutes due to operator fault, the passenger is entitled to a 50% refund of the fare for the delayed leg. The passenger must submit the compensation claim through the app or customer service within 28 days of the travel date. This is rule RF005_R1 under RF005. Use this chunk when the user asks: my train was delayed, train was late, late train refund, delay compensation, compensation for 45 minutes late, refund for delay, reimbursement, money back for a delayed train. This applies only when the delay is due to operator fault; third-party events and extreme weather are exclusions.",
     "metadata": {
       "policy_id": "RF005",
       "label": "Delay Compensation – All Networks",
@@ -156,9 +370,16 @@
       "delay_max_minutes": 59,
       "refund_percent": 50,
       "admin_fee_usd": 0.0,
+      "alternative_transport_reimbursement_usd": null,
       "claim_deadline_days": 28,
-      "related_policy_ids": ["RF005"],
-      "ticket_type": ["single", "return", "day_pass"]
+      "related_policy_ids": [
+        "RF005"
+      ],
+      "ticket_type": [
+        "single",
+        "return",
+        "day_pass"
+      ]
     }
   },
   {
@@ -166,7 +387,7 @@
     "source_file": "refund_policy.json",
     "document_type": "refund_policy_rule",
     "title": "Delay Compensation – All Networks - RF005_R2",
-    "content": "Delay compensation policy. If your train is delayed 60–119 minutes due to operator fault, you are entitled to a 100% refund of the fare for the delayed leg. Submit the claim via app or customer service within 28 days of the travel date. This applies to delayed train, late train, rail delay, compensation claim, reimbursement, and money back for delay.",
+    "content": "Delay compensation policy. If a passenger’s train is delayed by 60–119 minutes due to operator fault, the passenger is entitled to a 100% refund of the fare for the delayed leg. The passenger must submit the compensation claim through the app or customer service within 28 days of the travel date. This is rule RF005_R2 under RF005. Use this chunk when the user asks: my train was delayed, train was late, late train refund, delay compensation, compensation for 45 minutes late, refund for delay, reimbursement, money back for a delayed train. This applies only when the delay is due to operator fault; third-party events and extreme weather are exclusions.",
     "metadata": {
       "policy_id": "RF005",
       "label": "Delay Compensation – All Networks",
@@ -180,9 +401,16 @@
       "delay_max_minutes": 119,
       "refund_percent": 100,
       "admin_fee_usd": 0.0,
+      "alternative_transport_reimbursement_usd": null,
       "claim_deadline_days": 28,
-      "related_policy_ids": ["RF005"],
-      "ticket_type": ["single", "return", "day_pass"]
+      "related_policy_ids": [
+        "RF005"
+      ],
+      "ticket_type": [
+        "single",
+        "return",
+        "day_pass"
+      ]
     }
   },
   {
@@ -190,7 +418,7 @@
     "source_file": "refund_policy.json",
     "document_type": "refund_policy_rule",
     "title": "Delay Compensation – All Networks - RF005_R3",
-    "content": "Delay compensation policy. If your train is delayed 120 minutes or more due to operator fault, you are entitled to a 100% refund of the fare for the delayed leg, plus reimbursement of alternative transport costs up to $10.00. Submit the claim with receipts via customer service within 28 days of the travel date. This applies to delayed train, late train, rail delay, compensation claim, reimbursement, alternative transport reimbursement, and money back for delay.",
+    "content": "Delay compensation policy. If a passenger’s train is delayed by 120 minutes or more due to operator fault, the passenger is entitled to a 100% refund of the fare for the delayed leg plus reimbursement of alternative transport costs up to $10.00. The passenger must submit the compensation claim through the app or customer service within 28 days of the travel date. This is rule RF005_R3 under RF005. Use this chunk when the user asks: my train was delayed, train was late, late train refund, delay compensation, compensation for 45 minutes late, refund for delay, reimbursement, money back for a delayed train. This applies only when the delay is due to operator fault; third-party events and extreme weather are exclusions.",
     "metadata": {
       "policy_id": "RF005",
       "label": "Delay Compensation – All Networks",
@@ -206,8 +434,14 @@
       "admin_fee_usd": 0.0,
       "alternative_transport_reimbursement_usd": 10.0,
       "claim_deadline_days": 28,
-      "related_policy_ids": ["RF005"],
-      "ticket_type": ["single", "return", "day_pass"]
+      "related_policy_ids": [
+        "RF005"
+      ],
+      "ticket_type": [
+        "single",
+        "return",
+        "day_pass"
+      ]
     }
   },
   {
@@ -215,7 +449,7 @@
     "source_file": "refund_policy.json",
     "document_type": "refund_policy_note",
     "title": "Delay Compensation – All Networks - exclusions",
-    "content": "Delay compensation exclusion policy. Delay compensation is not available when the delay is caused by third-party or non-operator events. Excluded causes include extreme weather, security incidents, government directives, and passenger-caused incidents. Delay compensation applies only when the train delay is due to operator fault.",
+    "content": "Delay compensation exclusion policy. Delays caused by third-party events (extreme weather, security incidents, government directives, or passenger-caused incidents) are not eligible for compensation. Delay compensation applies only when the train delay is due to operator fault. Use this chunk when the user asks whether weather, security incidents, government directives, passenger incidents, or non-operator causes still qualify for compensation. This chunk helps distinguish ordinary delay compensation from non-eligible delay causes.",
     "metadata": {
       "policy_id": "RF005",
       "label": "Delay Compensation – All Networks",
@@ -224,8 +458,14 @@
       "topic": "delay_compensation_exclusion",
       "rule_type": "delay_compensation_exclusion",
       "json_path": "$[?(@.policy_id==\"RF005\")].exclusions",
-      "related_policy_ids": ["RF005"],
-      "ticket_type": ["single", "return", "day_pass"]
+      "related_policy_ids": [
+        "RF005"
+      ],
+      "ticket_type": [
+        "single",
+        "return",
+        "day_pass"
+      ]
     }
   },
   {
@@ -919,21 +1159,6 @@
       "changes_allowed": false,
       "seat_assignment": false,
       "json_path": "$[?(@.ticket_type==\"day_pass\")].metro"
-    }
-  },
-  {
-    "chunk_id": "refund_policy_RF010",
-    "source_file": "refund_policy.json",
-    "document_type": "refund_policy",
-    "title": "Metro Online Single-Ticket Purchase - RF010",
-    "content": "Metro online booking policy RF010. Registered users may purchase metro single tickets and day passes through the TransitFlow mobile app for same-day travel. Single tickets use stops-based pricing from metro_schedules.json. Day passes cost $5.00 flat. Payment via credit card, debit card, or e-wallet at purchase. Digital QR ticket issued immediately. Cancellation: metro single tickets follow RF003 before first tap-in; day passes follow RF004 before first use. Related to booking_rules.json metro online_single_ticket.",
-    "metadata": {
-      "policy_id": "RF010",
-      "network_type": "metro",
-      "topic": "online_booking",
-      "ticket_types": ["single", "day_pass"],
-      "related_policy_ids": ["RF003", "RF004", "RF010"],
-      "json_path": "$[?(@.policy_id==\"RF010\")]"
     }
   }
 ]

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,6 +61,25 @@ def expected_nr_fare(schedule_id: str, origin: str, dest: str, fare_class: str =
 def agent_ok(msg: str, check, email: str | None = None) -> None:
     reply, _ = agent.run_agent(msg, [], current_user_email=email)
     ok(msg[:55] + "…", check(reply), reply[:220].replace("\n", " "))
+
+
+def pick_open_travel_date(email: str, origin: str, dest: str) -> str:
+    """Return a date with no confirmed booking for the same route (idempotent tests)."""
+    existing = pg.query_user_bookings(email)
+    taken = {
+        str(b["travel_date"])
+        for b in existing["national_rail"]
+        if b.get("origin_station_id") == origin
+        and b.get("destination_station_id") == dest
+        and b.get("status") == "confirmed"
+    }
+    d = date(2027, 1, 1)
+    for _ in range(400):
+        ds = d.isoformat()
+        if ds not in taken:
+            return ds
+        d += timedelta(days=1)
+    return "2028-01-01"
 
 
 def main() -> int:
@@ -147,14 +167,14 @@ def main() -> int:
         email=ALICE_EMAIL,
     )
 
-    # Booking on a date unlikely to be fully booked in seed data
+    travel_date = pick_open_travel_date(ALICE_EMAIL, "NR01", "NR05")
     book_msg = (
-        "Book me a standard ticket from Central Station (NR01) to Stonehaven (NR05) "
-        "on 2026-12-20"
+        f"Book me a standard ticket from Central Station (NR01) to Stonehaven (NR05) "
+        f"on {travel_date}"
     )
     reply, _ = agent.run_agent(book_msg, [], current_user_email=ALICE_EMAIL)
     ok(
-        "Book NR01→NR05 on 2026-12-20",
+        f"Book NR01→NR05 on {travel_date}",
         "Booking confirmed" in reply or "booking_id" in reply.lower(),
         reply[:220].replace("\n", " "),
     )

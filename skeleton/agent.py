@@ -13,6 +13,8 @@ Design goals (course README):
 - National rail availability respects travel direction (origin stop before destination).
 - Logged-in users can book/cancel national rail and metro via PostgreSQL booking functions.
 - Policy questions prefer vector search over ``policy_chunks.json`` embeddings.
+
+TASK 6 EXTENSION: seat occupancy handler — see ``TASK6.md``.
 """
 
 from __future__ import annotations
