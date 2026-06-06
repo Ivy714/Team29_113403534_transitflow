@@ -49,6 +49,12 @@ def _gen_metro_trip_id() -> str:
     return f"MT-{suffix}"
 
 
+def _day_of_week_enum(travel_date: str) -> str:
+    """Map ISO date to schema ``day_of_week`` enum label (mon–sun)."""
+    d = date.fromisoformat(travel_date)
+    return ("mon", "tue", "wed", "thu", "fri", "sat", "sun")[d.weekday()]
+
+
 # ── Example ───────────────────────────────────────────────────────────────────
 
 
@@ -113,8 +119,22 @@ def query_national_rail_availability(
     """
     Return national rail schedules that serve both origin and destination
     in the correct order, with seat occupancy for the requested travel date.
+
+    When ``travel_date`` is set, only schedules operating on that weekday
+    (``national_rail_schedule_operates_on``) are included.
     """
-    sql = """
+    day_filter = ""
+    if travel_date:
+        day_filter = """
+        JOIN national_rail_schedule_operates_on op
+            ON op.schedule_id = s.schedule_id
+            AND op.day_of_week = %s::day_of_week
+        """
+        params: list = [_day_of_week_enum(travel_date), origin_id, destination_id, travel_date]
+    else:
+        params = [origin_id, destination_id, "1900-01-01"]
+
+    sql = f"""
         SELECT
             s.schedule_id,
             s.line,
@@ -125,21 +145,18 @@ def query_national_rail_availability(
             s.first_train_time,
             s.last_train_time,
             s.frequency_min,
-            -- origin stop info
             o_stop.stop_order        AS origin_stop_order,
             o_stop.travel_time_from_origin_min AS origin_travel_time,
-            -- destination stop info
             d_stop.stop_order        AS destination_stop_order,
             d_stop.travel_time_from_origin_min AS destination_travel_time,
-            -- stops between origin and destination
             (d_stop.stop_order - o_stop.stop_order) AS stops_travelled,
-            -- seat occupancy on travel_date (0 if no date given)
             COALESCE(booked.booked_seats, 0) AS booked_seats,
             GREATEST(
                 COALESCE(capacity.total_seats, 0) - COALESCE(booked.booked_seats, 0),
                 0
             ) AS available_seats
         FROM national_rail_schedules s
+        {day_filter}
         JOIN national_rail_schedule_stops o_stop
             ON o_stop.schedule_id = s.schedule_id
             AND o_stop.station_id = %s
@@ -148,7 +165,6 @@ def query_national_rail_availability(
             ON d_stop.schedule_id = s.schedule_id
             AND d_stop.station_id = %s
             AND d_stop.is_stopping = TRUE
-        -- origin must come before destination
         AND o_stop.stop_order < d_stop.stop_order
         LEFT JOIN (
             SELECT sl.schedule_id, COUNT(*) AS total_seats
@@ -166,10 +182,9 @@ def query_national_rail_availability(
         ) booked ON booked.schedule_id = s.schedule_id
         ORDER BY s.line, s.service_type, s.first_train_time
     """
-    date_param = travel_date or "1900-01-01"
     with _connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, (origin_id, destination_id, date_param))
+            cur.execute(sql, tuple(params))
             return [dict(row) for row in cur.fetchall()]
 
 
@@ -905,6 +920,7 @@ def execute_cancellation(booking_id: str, user_id: str) -> tuple[bool, dict | st
             return True, {
                 "booking_id": booking_id,
                 "original_amount_usd": amount,
+                "refund_amount": refund_amount,
                 "refund_amount_usd": refund_amount,
                 "admin_fee_usd": admin_fee,
                 "policy_note": note,
@@ -968,6 +984,7 @@ def _execute_metro_cancellation(trip_id: str, user_id: str) -> tuple[bool, dict 
             return True, {
                 "booking_id": trip_id,
                 "original_amount_usd": amount,
+                "refund_amount": refund_amount,
                 "refund_amount_usd": refund_amount,
                 "admin_fee_usd": 0.0,
                 "policy_note": f"{policy}: 100% refund before first tap-in",

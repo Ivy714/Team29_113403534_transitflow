@@ -381,6 +381,7 @@ def query_cheapest_route(
     data["origin_id"] = origin_id
     data["destination_id"] = destination_id
     data["total_cost"] = data["total_fare_usd"]
+    data["total_cost_usd"] = data["total_fare_usd"]
     return data
 
 

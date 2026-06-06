@@ -8,7 +8,7 @@
 
 | Full Name | Student ID | GitHub Username | Email |
 |-----------|-----------|----------------|-------|
-| Ying Shiuan | 113403504 | Ivy714 | *(team email)* |
+| 李盈萱 | 113403504 | Shiuan129 | shiuan0129@g.ncu.edu.tw |
 | ssuyu | 113403501 | ssuyuchen | *(team email)* |
 | 林昀希 | 113403534 | *(GitHub username)* | *(team email)* |
 
@@ -50,7 +50,7 @@
 
 | Member | Estimated % | Brief justification |
 |--------|-----------|---------------------|
-| Ying Shiuan (113403504) | 40% | Schema merge, queries, agent, integration tests, rubric fixes |
+| 李盈萱 (113403504) | 40% | Schema merge, queries, agent, integration tests, rubric fixes |
 | ssuyu (113403501) | 35% | Policy JSON/chunks, pgvector seeding, relational seed data |
 | 林昀希 (113403534) | 25% | Neo4j graph design, routing queries, UI reference |
 | **Total** | **100%** | |
@@ -75,6 +75,6 @@ We confirm that this work allocation accurately reflects how responsibilities we
 
 | Name | Signature / Typed name | Date |
 |------|----------------------|------|
-| Ying Shiuan | | 2026-06-06 |
+| 李盈萱 | 李盈萱 | 2026-06-06 |
 | ssuyu | | |
 | 林昀希 | | |
