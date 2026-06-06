@@ -12,11 +12,9 @@ TWO ROLES ARE SERVED HERE:
 from __future__ import annotations
 
 import json
-import hashlib
-import os
 import random
 import string
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 import psycopg2
@@ -24,6 +22,7 @@ import psycopg2.extras
 from psycopg2 import errorcodes
 
 from skeleton.config import PG_DSN, VECTOR_TOP_K, VECTOR_SIMILARITY_THRESHOLD
+from skeleton.password_hash import hash_password, verify_password
 
 
 def _connect():
@@ -46,19 +45,6 @@ def _gen_payment_id() -> str:
 def _gen_metro_trip_id() -> str:
     suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     return f"MT-{suffix}"
-
-
-def _mock_hash(plaintext: str):
-    """Mock hash for seed/demo purposes. Returns (hash_hex, salt_bytes)."""
-    salt = os.urandom(16)
-    h = hashlib.sha256(salt + plaintext.encode("utf-8")).hexdigest()
-    return h, salt
-
-
-def _mock_verify(plaintext: str, stored_hash: str, stored_salt: bytes) -> bool:
-    """Verify a mock-hashed value."""
-    h = hashlib.sha256(stored_salt + plaintext.encode("utf-8")).hexdigest()
-    return h == stored_hash
 
 
 # ── Example ───────────────────────────────────────────────────────────────────
@@ -146,7 +132,11 @@ def query_national_rail_availability(
             -- stops between origin and destination
             (d_stop.stop_order - o_stop.stop_order) AS stops_travelled,
             -- seat occupancy on travel_date (0 if no date given)
-            COALESCE(booked.booked_seats, 0) AS booked_seats
+            COALESCE(booked.booked_seats, 0) AS booked_seats,
+            GREATEST(
+                COALESCE(capacity.total_seats, 0) - COALESCE(booked.booked_seats, 0),
+                0
+            ) AS available_seats
         FROM national_rail_schedules s
         JOIN national_rail_schedule_stops o_stop
             ON o_stop.schedule_id = s.schedule_id
@@ -158,6 +148,12 @@ def query_national_rail_availability(
             AND d_stop.is_stopping = TRUE
         -- origin must come before destination
         AND o_stop.stop_order < d_stop.stop_order
+        LEFT JOIN (
+            SELECT sl.schedule_id, COUNT(*) AS total_seats
+            FROM seat_layouts sl
+            JOIN seats s ON s.layout_id = sl.layout_id
+            GROUP BY sl.schedule_id
+        ) capacity ON capacity.schedule_id = s.schedule_id
         LEFT JOIN (
             SELECT b.schedule_id, COUNT(*) AS booked_seats
             FROM bookings b
@@ -323,6 +319,7 @@ def query_user_profile(user_email: str) -> Optional[dict]:
             email,
             phone,
             date_of_birth,
+            EXTRACT(YEAR FROM date_of_birth)::INTEGER AS year_of_birth,
             registered_at,
             is_active
         FROM users
@@ -1007,17 +1004,18 @@ def register_user(
 
             # INSERT user
             registered_at = datetime.now(timezone.utc)
+            dob = date(year_of_birth, 1, 1)
             cur.execute(
                 """
                 INSERT INTO users
-                    (user_id, first_name, last_name, email, registered_at, is_active)
-                VALUES (%s, %s, %s, %s, %s, TRUE)
+                    (user_id, first_name, last_name, email, date_of_birth, registered_at, is_active)
+                VALUES (%s, %s, %s, %s, %s, %s, TRUE)
             """,
-                (user_id, first_name, surname, email, registered_at),
+                (user_id, first_name, surname, email, dob, registered_at),
             )
 
             # INSERT credentials
-            pw_hash, pw_salt = _mock_hash(password)
+            pw_hash, pw_salt = hash_password(password)
             cur.execute(
                 """
                 INSERT INTO user_credentials
@@ -1028,7 +1026,7 @@ def register_user(
             )
 
             # INSERT security question
-            sq_hash, sq_salt = _mock_hash(secret_answer.lower())
+            sq_hash, sq_salt = hash_password(secret_answer.lower())
             cur.execute("SELECT COUNT(*) FROM user_security_questions")
             sq_count = cur.fetchone()[0]
             sq_id = f"SQ{sq_count + 1:03d}"
@@ -1063,6 +1061,7 @@ def login_user(email: str, password: str) -> Optional[dict]:
             u.last_name   AS surname,
             u.phone,
             u.date_of_birth,
+            EXTRACT(YEAR FROM u.date_of_birth)::INTEGER AS year_of_birth,
             u.is_active,
             uc.password_hash,
             uc.password_salt
@@ -1078,7 +1077,7 @@ def login_user(email: str, password: str) -> Optional[dict]:
                 return None
             if not row["is_active"]:
                 return None
-            if not _mock_verify(
+            if not verify_password(
                 password, row["password_hash"], bytes(row["password_salt"])
             ):
                 return None
@@ -1091,6 +1090,7 @@ def login_user(email: str, password: str) -> Optional[dict]:
                 "surname": row["surname"],
                 "phone": row["phone"],
                 "date_of_birth": row["date_of_birth"],
+                "year_of_birth": row["year_of_birth"],
                 "is_active": row["is_active"],
             }
 
@@ -1127,7 +1127,7 @@ def verify_secret_answer(email: str, answer: str) -> bool:
             if not row:
                 return False
             stored_hash, stored_salt = row
-            return _mock_verify(answer.lower(), stored_hash, bytes(stored_salt))
+            return verify_password(answer.lower(), stored_hash, bytes(stored_salt))
 
 
 def update_password(email: str, new_password: str) -> bool:
@@ -1141,7 +1141,7 @@ def update_password(email: str, new_password: str) -> bool:
             if not row:
                 return False
             user_id = row[0]
-            pw_hash, pw_salt = _mock_hash(new_password)
+            pw_hash, pw_salt = hash_password(new_password)
             cur.execute(
                 """
                 UPDATE user_credentials

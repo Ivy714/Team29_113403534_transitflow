@@ -8,7 +8,6 @@ Run AFTER docker-compose up -d.
 Safe to re-run: uses ON CONFLICT DO NOTHING throughout.
 """
 
-import hashlib
 import json
 import os
 import sys
@@ -23,6 +22,7 @@ DATA_DIR = os.path.join(PROJECT_DIR, "train-mock-data")
 
 sys.path.insert(0, PROJECT_DIR)
 from skeleton import config as cfg
+from skeleton.password_hash import hash_password
 
 
 def load(filename):
@@ -49,15 +49,17 @@ def insert_many(cur, table, columns, rows):
     return cur.rowcount
 
 
-def mock_hash(plaintext: str):
-    """
-    Mock hashing for seed data — NOT production argon2id.
-    Returns (hash_hex_str, salt_bytes) matching schema:
-      password_hash TEXT, password_salt BYTEA
-    """
-    salt = os.urandom(16)
-    h = hashlib.sha256(salt + plaintext.encode("utf-8")).hexdigest()
-    return h, salt  # str, bytes
+def upsert_many(cur, table, columns, rows, conflict_target, update_columns):
+    """Bulk upsert — refreshes rows when re-seeding after schema/hash changes."""
+    if not rows:
+        return 0
+    sets = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_columns)
+    sql = (
+        f"INSERT INTO {table} ({', '.join(columns)}) VALUES %s "
+        f"ON CONFLICT ({conflict_target}) DO UPDATE SET {sets}"
+    )
+    execute_values(cur, sql, rows)
+    return cur.rowcount
 
 
 # ── layout lookup (built once, used in seed_national_rail_bookings) ───────────
@@ -369,23 +371,24 @@ def seed_users(cur):
         users,
     )
 
-    # user_credentials：mock hash（SHA-256 + random salt 模擬 argon2id）
-    # schema 是 password_hash TEXT, password_salt BYTEA
+    # user_credentials: argon2id (matches register_user / login_user)
     creds = []
     for u in data:
-        h, salt = mock_hash(u["password"])
+        h, salt = hash_password(u["password"])
         creds.append((u["user_id"], h, salt, "argon2id"))
-    insert_many(
+    upsert_many(
         cur,
         "user_credentials",
         ["user_id", "password_hash", "password_salt", "hash_algorithm"],
         creds,
+        "user_id",
+        ["password_hash", "password_salt", "hash_algorithm"],
     )
 
     # user_security_questions：secret_question / secret_answer 各一筆
     questions = []
     for i, u in enumerate(data, start=1):
-        h, salt = mock_hash(u["secret_answer"])
+        h, salt = hash_password(u["secret_answer"])
         questions.append(
             (
                 f"SQ{i:03d}",
@@ -396,7 +399,7 @@ def seed_users(cur):
                 "argon2id",
             )
         )
-    insert_many(
+    upsert_many(
         cur,
         "user_security_questions",
         [
@@ -408,6 +411,13 @@ def seed_users(cur):
             "hash_algorithm",
         ],
         questions,
+        "security_question_id",
+        [
+            "secret_question",
+            "secret_answer_hash",
+            "secret_answer_salt",
+            "hash_algorithm",
+        ],
     )
     print(
         f"  ✓ users ({len(users)}) + user_credentials ({len(creds)}) + user_security_questions ({len(questions)})"

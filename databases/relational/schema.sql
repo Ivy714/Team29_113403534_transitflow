@@ -53,10 +53,15 @@ CREATE TYPE day_of_week     AS ENUM ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', '
 
 -- =============================================================
 -- 1. USERS
+-- PK choice: VARCHAR(10) user_id matches mock JSON (RU01, RU02) for stable
+-- cross-layer references with Neo4j and the agent; SERIAL would require a
+-- separate business key column.
+-- Delete strategy: soft delete — journeys/bookings keep rows; status='cancelled'
+-- and bookings.seat_occupies_slot=FALSE release seats without physical DELETE.
 -- =============================================================
 
 CREATE TABLE users (
-    user_id        VARCHAR(10)  PRIMARY KEY,
+    user_id        VARCHAR(10)  PRIMARY KEY,  -- business key from registered_users.json
     first_name     VARCHAR(100) NOT NULL,
     last_name      VARCHAR(100) NOT NULL,
     email          VARCHAR(255) NOT NULL UNIQUE,

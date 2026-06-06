@@ -510,7 +510,22 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
         return []
 
     delayed_station_id = delayed_station_id.upper()
-    hops = max(1, min(hops, 5))
+    hops = max(0, min(hops, 5))
+
+    if hops == 0:
+        label = _node_label(delayed_station_id)
+        cypher = f"""
+        MATCH (n:{label} {{station_id: $station_id}})
+        RETURN
+            n.station_id AS station_id,
+            n.name AS name,
+            0 AS hops_away,
+            coalesce(n.lines, [n.line]) AS lines_affected,
+            CASE WHEN 'MetroStation' IN labels(n) THEN 'metro' ELSE 'rail' END AS network
+        """
+        with _session() as session:
+            row = session.run(cypher, station_id=delayed_station_id).single()
+            return [dict(row)] if row else []
 
     cypher = f"""
     MATCH (origin {{station_id: $station_id}})
