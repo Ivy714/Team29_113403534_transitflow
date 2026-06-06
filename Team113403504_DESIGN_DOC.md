@@ -250,28 +250,56 @@ after container restarts.
 
 ## Section 7 — Optional Extension (Task 6)
 
-See **`TASK6.md`** for full detail.
+See **`TASK6.md`** for the file manifest.
 
-**Motivation:** Answer “how full is train NR_SCH01 on date X?” without listing every seat.
+### Motivation
 
-**Database change:** New query function only (no new tables):
+Aggregated seat occupancy answers operational capacity questions without listing every seat row. A **My Bookings** table gives logged-in passengers persistent, scannable history — something ephemeral chat replies cannot provide.
 
-```sql
--- Counts seats joined through seat_layouts for a schedule + fare_class
-SELECT COUNT(*) FROM seats s
-JOIN coaches c ON ...
-JOIN seat_layouts sl ON sl.schedule_id = $schedule_id
-WHERE c.fare_class = $fare_class;
-```
+### Database changes
 
-Compared with `query_available_seats` to derive booked count.
-
-**Example:**
+No new tables. Extension function:
 
 ```python
 pg.query_schedule_seat_occupancy("NR_SCH01", "2026-06-01", "standard")
-# → total_seats: 18, booked_seats: 2, available_seats: 16
+# → total_seats, booked_seats, available_seats
 ```
 
-**Testing evidence:** Agent handler responds to “How many seats on NR_SCH01 on 2026-06-15?”;
-`validate_integration.py` booking and availability checks pass after Docker seed.
+SQL counts seats via `seat_layouts` → `coaches` → `seats`; available count delegates to `query_available_seats`.
+
+### UI changes (substantial — Task 6 live demo)
+
+| Tab | Data source | Purpose |
+|-----|-------------|---------|
+| **My Bookings** | `query_user_bookings(email)` | Dataframe of NR + metro journeys |
+| **Seat Capacity** | `query_schedule_seat_occupancy(...)` | Dropdown schedule + date lookup without LLM |
+
+Screenshots for submission: capture both tabs after login + occupancy lookup.
+
+### Example queries & expected output
+
+```python
+>>> pg.query_schedule_seat_occupancy("NR_SCH01", "2026-06-01", "standard")
+{'schedule_id': 'NR_SCH01', 'travel_date': '2026-06-01', 'fare_class': 'standard',
+ 'total_seats': 18, 'booked_seats': 2, 'available_seats': 16}
+```
+
+Agent: *“How many seats are available on NR_SCH01 on 2026-06-15?”* → formatted occupancy block.
+
+### Testing evidence
+
+- `python3 skeleton/validate_integration.py` — Task 6 occupancy + agent checks pass
+- UI manual: login → My Bookings tab shows Alice's BK/MT rows
+- UI manual: Seat Capacity tab → NR_SCH01 / 2026-06-01 → available count displayed
+
+---
+
+## EEClass Submission Checklist (Team)
+
+| Deliverable | File / action |
+|-------------|----------------|
+| Public GitHub repo | `https://github.com/Ivy714/IM2002-DBMGT-Train-final` branch `113403504` |
+| Design document | Upload `Team113403504_DESIGN_DOC.md` |
+| Work allocation | Upload `Team113403504_WORK_ALLOCATION.md` (fill emails + signatures) |
+| Peer review | Each member uploads own `Team113403504_<StudentID>_PEER_REVIEW.md` (confidential) |
+| Live demo | Docker up + seeds + `python3 skeleton/ui.py` |

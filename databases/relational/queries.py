@@ -1203,21 +1203,20 @@ def query_schedule_seat_occupancy(
     """
     Return booked vs available seat counts for a national rail schedule on a date.
 
-    Task 4 custom query — compares total seats in the layout with
-    ``query_available_seats`` for the same schedule, date, and fare class.
+    Task 6 extension — useful for capacity / availability questions in the agent.
 
-    Args:
-        schedule_id: e.g. ``NR_SCH01``
-        travel_date: ISO date ``YYYY-MM-DD``
-        fare_class: ``standard`` or ``first``
-
-    Returns:
-        dict with keys: schedule_id, travel_date, fare_class,
-        total_seats, booked_seats, available_seats
+    Algorithm (why two queries):
+    1. ``total_seats`` — COUNT seats joined through coaches/layouts for this schedule
+       and fare class (physical capacity from seed data).
+    2. ``available_seats`` — len of ``query_available_seats`` which excludes seats
+       with active ``bookings.seat_occupies_slot = TRUE`` on that date.
+    3. ``booked_seats`` — derived as total − available so the three numbers reconcile.
     """
+    # Reuse existing seat-selection logic so occupancy matches booking rules.
     seats = query_available_seats(schedule_id, travel_date, fare_class)
     with _connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # Total capacity: all physical seats in coaches assigned to this fare class.
             cur.execute(
                 """
                 SELECT COUNT(*) AS total_seats

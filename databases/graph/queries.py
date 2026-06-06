@@ -42,9 +42,19 @@ except Exception:
 
 
 def _session():
-    """Create a short-lived Neo4j session and fail fast if driver is unavailable."""
+    """Create a Neo4j session; verify connectivity and rebuild driver if stale."""
+    global _driver
     if not _driver:
         raise RuntimeError("Neo4j driver is not initialized.")
+    try:
+        _driver.verify_connectivity()
+    except Exception:
+        try:
+            _driver.close()
+        except Exception:
+            pass
+        _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+        _driver.verify_connectivity()
     return _driver.session()
 
 

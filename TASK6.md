@@ -1,50 +1,49 @@
-# Task 6 Extension — Schedule Seat Occupancy
+# Task 6 Extension — Seat Occupancy & Trip History UI
 
-Team **113403504** optional database extension for per-schedule capacity reporting.
+Team **113403504** optional extension (database + substantial UI).
 
 ## Motivation
 
-Passengers and staff often ask how full a specific train is on a given date. The course
-schema already tracks individual seat bookings, but there was no single query that
-returned **total vs booked vs available** seats for a schedule. This extension adds that
-aggregate view and wires it into the agent.
+1. **Capacity questions** — “How full is NR_SCH01 on 2026-06-15?” need aggregated seat counts, not a seat list.
+2. **Trip history** — Logged-in users benefit from a scannable bookings table the chat cannot persistently display.
 
 ## Files modified or added
 
 | File | Change |
 |------|--------|
-| `databases/relational/queries.py` | Added `query_schedule_seat_occupancy(schedule_id, travel_date, fare_class)` |
-| `skeleton/agent.py` | Rule-based handler for “How many seats on NR_SCH01 …?” style questions |
+| `databases/relational/queries.py` | `query_schedule_seat_occupancy(schedule_id, travel_date, fare_class)` |
+| `skeleton/agent.py` | Rule-based handler for seat-occupancy chat questions |
+| `skeleton/ui.py` | **My Bookings** tab (`query_user_bookings`) + **Seat Capacity** tab (direct DB lookup) |
+| `skeleton/validate_integration.py` | Automated test for occupancy query + idempotent booking |
 | `TASK6.md` | This manifest |
+| `Team113403504_DESIGN_DOC.md` | Section 7 documentation |
 
-## Database operation
+## Database operation: `query_schedule_seat_occupancy`
 
-Function: **`query_schedule_seat_occupancy`**
+1. Count total seats in `seats` → `coaches` → `seat_layouts` for schedule + fare class.
+2. Count available via existing `query_available_seats` (respects active bookings).
+3. Return `{total_seats, booked_seats, available_seats}` where `booked = total − available`.
 
-- Counts all seats in `seats` / `coaches` / `seat_layouts` for the schedule and fare class.
-- Reuses `query_available_seats` to count unbooked seats (respects `seat_occupies_slot` and cancelled journeys).
-- Returns `{total_seats, booked_seats, available_seats}`.
-
-## Example query
+## Example (Python shell)
 
 ```python
 from databases.relational import queries as pg
-occ = pg.query_schedule_seat_occupancy("NR_SCH01", "2026-06-01", "standard")
-# {'schedule_id': 'NR_SCH01', 'travel_date': '2026-06-01', 'fare_class': 'standard',
-#  'total_seats': 18, 'booked_seats': 2, 'available_seats': 16}
+pg.query_schedule_seat_occupancy("NR_SCH01", "2026-06-01", "standard")
 ```
 
-## Agent example
+## Example (UI — live demo for TA)
+
+1. `python3 skeleton/ui.py`
+2. Open **Seat Capacity** tab → schedule `NR_SCH01`, date `2026-06-01`, class `standard` → **Look up occupancy**
+3. Login as `alice.tan@email.com` / `alice1990` → **My Bookings** tab → **Refresh**
+
+## Example (Agent)
 
 > How many standard seats are available on NR_SCH01 on 2026-06-15?
 
-Expected reply includes total / booked / available counts from PostgreSQL.
-
 ## Testing
 
-Run after seeding:
-
 ```bash
-python3 skeleton/validate_integration.py
-python3 -c "from databases.relational import queries as pg; print(pg.query_schedule_seat_occupancy('NR_SCH01','2026-06-01'))"
+python3 skeleton/validate_integration.py   # includes Task 6 occupancy check
+python3 skeleton/ui.py                     # manual UI demo
 ```

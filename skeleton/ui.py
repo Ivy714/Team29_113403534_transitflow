@@ -7,27 +7,33 @@ Run from the project root::
 
 Then open http://127.0.0.1:7860
 
-The UI wires chat messages to ``skeleton.agent.run_agent``, and auth forms to
-``databases.relational.queries`` login/register helpers.
-
-Chat history uses Gradio 4 ``Chatbot(type="messages")`` format:
-``[{"role": "user"|"assistant", "content": str}, ...]``.
+TASK 6 EXTENSION: My Bookings table + Seat Capacity lookup tabs — see ``TASK6.md``.
 """
 
+from __future__ import annotations
+
+import json
 import sys
 sys.path.insert(0, ".")
 
 import gradio as gr
 from skeleton.agent import run_agent
 from skeleton.llm_provider import llm
-from skeleton.config import GEMINI_CHAT_MODEL, OLLAMA_CHAT_MODEL
+from skeleton.config import DATA_DIR, GEMINI_CHAT_MODEL, OLLAMA_CHAT_MODEL
 from databases.relational.queries import (
     login_user,
     register_user,
     get_user_secret_question,
     verify_secret_answer,
     update_password,
+    query_user_bookings,
+    query_schedule_seat_occupancy,
 )
+
+NR_SCHEDULE_IDS = [
+    s["schedule_id"]
+    for s in json.loads((DATA_DIR / "national_rail_schedules.json").read_text(encoding="utf-8"))
+]
 
 SECRET_QUESTIONS = [
     "What is the name of your first pet?",
@@ -74,6 +80,62 @@ def chat(user_message: str, history_display: list, agent_history: list,
 def clear_conversation():
     """Reset chat UI, agent history, and hide the debug panel."""
     return [], [], gr.update(value="", visible=False)
+
+
+# ── Task 6 UI panels (bookings table + seat occupancy lookup) ─────────────────
+
+BOOKINGS_HEADERS = ["ID", "Network", "From", "To", "Date", "Class/Type", "Status", "Amount USD"]
+
+
+def bookings_table_for_user(email: str | None) -> tuple[list, str]:
+    """Build rows for the My Bookings tab from PostgreSQL."""
+    if not email:
+        return [], "_Log in to view your booking history._"
+    data = query_user_bookings(email)
+    rows: list[list] = []
+    for b in data["national_rail"]:
+        rows.append([
+            b.get("booking_id"),
+            "National Rail",
+            b.get("origin_name", b.get("origin_station_id")),
+            b.get("destination_name", b.get("destination_station_id")),
+            str(b.get("travel_date", "")),
+            b.get("fare_class"),
+            b.get("status"),
+            float(b.get("amount_usd") or 0),
+        ])
+    for t in data["metro"]:
+        rows.append([
+            t.get("trip_id"),
+            "Metro",
+            t.get("origin_name"),
+            t.get("destination_name"),
+            str(t.get("travel_date", "")),
+            t.get("ticket_type"),
+            t.get("status"),
+            float(t.get("amount_usd") or 0),
+        ])
+    note = f"**{len(rows)}** journey(s) for `{email}`"
+    return rows, note
+
+
+def lookup_seat_occupancy(schedule_id: str, travel_date: str, fare_class: str) -> str:
+    """Task 6 — direct DB lookup surfaced in UI (not via chat)."""
+    if not schedule_id or not travel_date:
+        return "Select a schedule and travel date."
+    fc = "first" if (fare_class or "").lower() == "first" else "standard"
+    try:
+        occ = query_schedule_seat_occupancy(schedule_id, travel_date.strip(), fc)
+    except Exception as exc:
+        return f"Lookup failed: {exc}"
+    return (
+        f"### Seat occupancy — {occ['schedule_id']}\n"
+        f"- **Date:** {occ['travel_date']}\n"
+        f"- **Fare class:** {occ['fare_class']}\n"
+        f"- **Total seats:** {occ['total_seats']}\n"
+        f"- **Booked:** {occ['booked_seats']}\n"
+        f"- **Available:** {occ['available_seats']}"
+    )
 
 
 # ── Provider / model selection ────────────────────────────────────────────────
@@ -342,58 +404,93 @@ with gr.Blocks(title="TransitFlow", theme=gr.themes.Soft()) as demo:
         forgot_msg               = gr.Markdown("")
         forgot_back_btn          = gr.Button("Back to login", size="sm")
 
-    # ── Main chat area ────────────────────────────────────────────────
-    with gr.Row():
-
-        # ── Left: chat ────────────────────────────────────────────────
-        with gr.Column(scale=3):
-            chatbot = gr.Chatbot(
-                label="TransitFlow Assistant",
-                height=420,
-                type="messages",
-            )
-
+    # ── Main tabs: chat + Task 6 panels ───────────────────────────────
+    with gr.Tabs():
+        with gr.Tab("💬 Chat"):
             with gr.Row():
-                msg = gr.Textbox(
-                    placeholder="Ask e.g. 'Are there seats from London to Bristol?'",
-                    show_label=False,
-                    scale=4,
-                )
-                send_btn = gr.Button("Send", variant="primary", scale=1)
+                with gr.Column(scale=3):
+                    chatbot = gr.Chatbot(
+                        label="TransitFlow Assistant",
+                        height=420,
+                        type="messages",
+                    )
 
+                    with gr.Row():
+                        msg = gr.Textbox(
+                            placeholder="Ask e.g. 'Are there seats from London to Bristol?'",
+                            show_label=False,
+                            scale=4,
+                        )
+                        send_btn = gr.Button("Send", variant="primary", scale=1)
+
+                    with gr.Row():
+                        clear_btn = gr.Button("🗑️ Clear conversation", size="sm")
+                        debug_toggle = gr.Checkbox(label="🔍 Show database debug panel", value=True)
+
+                    debug_panel = gr.Markdown(value="", visible=False)
+
+                with gr.Column(scale=1):
+                    gr.Markdown("### 🤖 LLM Provider")
+                    chat_model_dropdown = gr.Dropdown(
+                        choices=get_chat_model_choices(),
+                        value=get_initial_chat_model_value(),
+                        label="Chat model",
+                        info="Local Ollama models run fully locally. Gemini uses your API key.",
+                    )
+                    provider_status = gr.Markdown(value="**Active:** llama3.2:1b")
+                    ollama_status = gr.Markdown(value=get_ollama_status())
+
+                    gr.Markdown("---")
+                    gr.Markdown("### 💡 Try these examples")
+                    for example in EXAMPLES:
+                        gr.Button(example, size="sm").click(
+                            fn=lambda e=example: e,
+                            outputs=msg,
+                        )
+
+        with gr.Tab("📋 My Bookings"):
+            gr.Markdown(
+                "Structured trip history from PostgreSQL (Task 6 UI). "
+                "**Login required** — data is not available through free-text chat alone."
+            )
+            bookings_note = gr.Markdown("_Log in to view your booking history._")
+            bookings_table = gr.Dataframe(
+                headers=BOOKINGS_HEADERS,
+                datatype=["str"] * len(BOOKINGS_HEADERS),
+                interactive=False,
+                wrap=True,
+            )
+            refresh_bookings_btn = gr.Button("🔄 Refresh bookings", size="sm")
+
+        with gr.Tab("💺 Seat Capacity"):
+            gr.Markdown(
+                "Task 6 extension — calls `query_schedule_seat_occupancy` directly "
+                "(bypasses the LLM)."
+            )
             with gr.Row():
-                clear_btn    = gr.Button("🗑️ Clear conversation", size="sm")
-                debug_toggle = gr.Checkbox(label="🔍 Show database debug panel", value=True)
-
-            # Debug panel — hidden until checkbox is ticked and a message is sent
-            debug_panel = gr.Markdown(
-                value="",
-                visible=False,
-            )
-
-        # ── Right: sidebar ────────────────────────────────────────────
-        with gr.Column(scale=1):
-
-            gr.Markdown("### 🤖 LLM Provider")
-            chat_model_dropdown = gr.Dropdown(
-                choices=get_chat_model_choices(),
-                value=get_initial_chat_model_value(),
-                label="Chat model",
-                info="Local Ollama models run fully locally. Gemini uses your API key.",
-            )
-            provider_status = gr.Markdown(value="**Active:** llama3.2:1b")
-            ollama_status   = gr.Markdown(value=get_ollama_status())
-
-            gr.Markdown("---")
-
-            gr.Markdown("### 💡 Try these examples")
-            for example in EXAMPLES:
-                gr.Button(example, size="sm").click(
-                    fn=lambda e=example: e,
-                    outputs=msg,
+                occ_schedule = gr.Dropdown(
+                    choices=NR_SCHEDULE_IDS,
+                    value=NR_SCHEDULE_IDS[0] if NR_SCHEDULE_IDS else None,
+                    label="National rail schedule",
                 )
+                occ_date = gr.Textbox(label="Travel date", value="2026-06-01", placeholder="YYYY-MM-DD")
+                occ_class = gr.Radio(choices=["standard", "first"], value="standard", label="Fare class")
+            occ_lookup_btn = gr.Button("Look up occupancy", variant="primary")
+            occ_result = gr.Markdown("")
 
     # ── Event wiring ──────────────────────────────────────────────────
+
+    refresh_bookings_btn.click(
+        fn=lambda email: bookings_table_for_user(email),
+        inputs=[current_user_state],
+        outputs=[bookings_table, bookings_note],
+    )
+
+    occ_lookup_btn.click(
+        fn=lookup_seat_occupancy,
+        inputs=[occ_schedule, occ_date, occ_class],
+        outputs=occ_result,
+    )
 
     chat_model_dropdown.change(
         fn=on_chat_model_change,
@@ -457,6 +554,10 @@ with gr.Blocks(title="TransitFlow", theme=gr.themes.Soft()) as demo:
             logout_btn,
             login_panel,
         ],
+    ).then(
+        fn=bookings_table_for_user,
+        inputs=[current_user_state],
+        outputs=[bookings_table, bookings_note],
     )
 
     # Logout
@@ -472,6 +573,9 @@ with gr.Blocks(title="TransitFlow", theme=gr.themes.Soft()) as demo:
             register_panel,
             forgot_panel,
         ],
+    ).then(
+        fn=lambda: bookings_table_for_user(None),
+        outputs=[bookings_table, bookings_note],
     )
 
     # Register
@@ -490,6 +594,10 @@ with gr.Blocks(title="TransitFlow", theme=gr.themes.Soft()) as demo:
             logout_btn,
             register_panel,
         ],
+    ).then(
+        fn=bookings_table_for_user,
+        inputs=[current_user_state],
+        outputs=[bookings_table, bookings_note],
     )
 
     # Forgot password — step 1: find question

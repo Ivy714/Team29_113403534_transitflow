@@ -28,7 +28,7 @@
 | **Task 3** — PostgreSQL seeding | 113403501 | 113403504 | `seed_postgres.py` |
 | **Task 4** — Neo4j graph & seeding | 113403534 | 113403504 | `seed_neo4j.py`, `seed.cypher` |
 | **Task 5** — Neo4j query functions | 113403534 | 113403504 | Six routing functions |
-| **Task 6** *(extension)* — Seat occupancy | 113403504 | — | See `TASK6.md` |
+| **Task 6** *(extension)* — Seat occupancy + UI tabs | 113403504 | — | `TASK6.md`, ui.py panels |
 | Policy RAG chunks + `seed_vectors.py` | 113403501 | 113403504 | 59 policy chunks |
 | Agent + UI integration | 113403504 | 113403534 | Rule-based router + Gradio |
 

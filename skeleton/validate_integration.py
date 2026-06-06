@@ -183,6 +183,22 @@ def main() -> int:
         reply[:220].replace("\n", " "),
     )
 
+    print("\n=== Task 6 — seat occupancy ===")
+    try:
+        occ = pg.query_schedule_seat_occupancy("NR_SCH01", "2026-06-01", "standard")
+        ok(
+            "query_schedule_seat_occupancy",
+            occ.get("total_seats", 0) > 0 and occ.get("available_seats", -1) >= 0,
+            str(occ),
+        )
+    except Exception as e:
+        ok("query_schedule_seat_occupancy", False, str(e))
+
+    agent_ok(
+        "How many seats are available on NR_SCH01 on 2026-06-15?",
+        lambda t: "available" in t.lower() and ("seat" in t.lower() or "occupancy" in t.lower()),
+    )
+
     print("\n=== Teammate policy_chunks sync ===")
     import subprocess
 
