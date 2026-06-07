@@ -1,4 +1,4 @@
-# Database Design Document — Team 113403504
+# Database Design Document — Team 29
 
 TransitFlow final project design document (IM2002 Database Management).
 
@@ -324,8 +324,8 @@ python3 skeleton/validate_ui.py            # UI handlers + Gradio server — 0 f
 
 | Deliverable | File / action |
 |-------------|----------------|
-| Public GitHub repo | `https://github.com/Ivy714/IM2002-DBMGT-Train-final` branch `113403504` |
-| Design document | Upload `Team113403504_DESIGN_DOC.md` |
-| Work allocation | **EEClass only** — upload `Team113403504_WORK_ALLOCATION.md`; **do not commit to GitHub** (contains personal data per course policy) |
-| Peer review | Each member uploads own `Team113403504_<StudentID>_PEER_REVIEW.md` (confidential) |
+| Public GitHub repo | `https://github.com/Ivy714/IM2002-DBMGT-Train-final` branch `113403504` (code) + `main` (this doc) |
+| Design document | Upload `Team29_DESIGN_DOC.md` |
+| Work allocation | **EEClass only** — upload `Team29_WORK_ALLOCATION.md`; **do not commit to GitHub** (contains personal data per course policy) |
+| Peer review | Each member uploads own `Team29_<StudentID>_PEER_REVIEW.md` (confidential) |
 | Live demo | Docker up + seeds + `python3 skeleton/ui.py` |
