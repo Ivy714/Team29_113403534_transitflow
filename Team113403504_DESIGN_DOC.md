@@ -326,6 +326,6 @@ python3 skeleton/validate_ui.py            # UI handlers + Gradio server — 0 f
 |-------------|----------------|
 | Public GitHub repo | `https://github.com/Ivy714/IM2002-DBMGT-Train-final` branch `113403504` |
 | Design document | Upload `Team113403504_DESIGN_DOC.md` |
-| Work allocation | Upload `Team113403504_WORK_ALLOCATION.md` (fill emails + signatures) |
+| Work allocation | **EEClass only** — upload `Team113403504_WORK_ALLOCATION.md`; **do not commit to GitHub** (contains personal data per course policy) |
 | Peer review | Each member uploads own `Team113403504_<StudentID>_PEER_REVIEW.md` (confidential) |
 | Live demo | Docker up + seeds + `python3 skeleton/ui.py` |
