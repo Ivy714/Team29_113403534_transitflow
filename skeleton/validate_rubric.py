@@ -184,7 +184,7 @@ def main() -> int:
         occ["total_seats"] == occ["booked_seats"] + occ["available_seats"],
         str(occ),
     )
-    for p in (ROOT / "TASK6.md", ROOT / "Team113403504_DESIGN_DOC.md"):
+    for p in (ROOT / "TASK6.md", ROOT / "Team29_DESIGN_DOC.md"):
         ok(f"exists {p.name}", p.is_file(), "")
     for text, needle in [
         (ROOT / "databases/relational/queries.py", "TASK 6 EXTENSION"),

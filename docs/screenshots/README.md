@@ -1,6 +1,6 @@
 # Task 6 — Screenshot assets for Design Doc Section 7
 
-Place PNG files here, then commit so `Team113403504_DESIGN_DOC.md` image links resolve on GitHub.
+Place PNG files here, then commit so `Team29_DESIGN_DOC.md` image links resolve on GitHub.
 
 ## Required files
 
@@ -19,4 +19,4 @@ Place PNG files here, then commit so `Team113403504_DESIGN_DOC.md` image links r
 
 ## Verify
 
-Open `Team113403504_DESIGN_DOC.md` in GitHub preview — all three `![](docs/screenshots/...)` images should render.
+Open `Team29_DESIGN_DOC.md` in GitHub preview — all three `![](docs/screenshots/...)` images should render.

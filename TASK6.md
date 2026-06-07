@@ -1,6 +1,6 @@
 # Task 6 Extension — Seat Occupancy & Trip History UI
 
-Team **113403504** optional extension (database + substantial UI).
+Team **29** optional extension (database + substantial UI).
 
 ## Motivation
 
@@ -16,7 +16,7 @@ Team **113403504** optional extension (database + substantial UI).
 | `skeleton/ui.py` | **My Bookings** tab (`query_user_bookings`) + **Seat Capacity** tab (direct DB lookup) |
 | `skeleton/validate_integration.py` | Automated test for occupancy query + idempotent booking |
 | `TASK6.md` | This manifest |
-| `Team113403504_DESIGN_DOC.md` | Section 7 documentation |
+| `Team29_DESIGN_DOC.md` | Section 7 documentation |
 
 ## Database operation: `query_schedule_seat_occupancy`
 
