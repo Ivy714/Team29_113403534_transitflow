@@ -274,9 +274,35 @@ SQL counts seats via `seat_layouts` → `coaches` → `seats`; available count d
 | **My Bookings** | `query_user_bookings(email)` | Dataframe of NR + metro journeys |
 | **Seat Capacity** | `query_schedule_seat_occupancy(...)` | Dropdown schedule + date lookup without LLM |
 
-Screenshots for submission: capture both tabs after login + occupancy lookup.
+### Testing evidence — screenshots
 
-### Example queries & expected output
+> **How to add:** Run `python3 skeleton/ui.py`, capture PNGs, save to `docs/screenshots/` (see that folder's README). Replace broken image icons below after saving files.
+
+#### Screenshot 1 — My Bookings tab (login required)
+
+**Steps:** Login `alice.tan@email.com` / `alice1990` → open **📋 My Bookings** → click **Refresh bookings**.
+
+**Expected:** Dataframe with at least one National Rail and/or Metro row; note shows journey count for Alice.
+
+![Task 6 — My Bookings tab after login](docs/screenshots/task6_my_bookings.png)
+
+#### Screenshot 2 — Seat Capacity tab (direct DB lookup)
+
+**Steps:** Open **💺 Seat Capacity** → schedule `NR_SCH01`, date `2026-06-01`, class `standard` → **Look up occupancy**.
+
+**Expected:** Markdown block showing total / booked / available seats (e.g. 18 total, 16 available).
+
+![Task 6 — Seat Capacity lookup for NR_SCH01](docs/screenshots/task6_seat_capacity.png)
+
+#### Screenshot 3 — Chat agent seat question *(optional bonus evidence)*
+
+**Steps:** **💬 Chat** tab → ask: *How many seats are available on NR_SCH01 on 2026-06-15?*
+
+**Expected:** Agent returns formatted seat occupancy (total / booked / available).
+
+![Task 6 — Chat seat occupancy response](docs/screenshots/task6_chat_seats.png)
+
+### Automated test evidence (no screenshot needed)
 
 ```python
 >>> pg.query_schedule_seat_occupancy("NR_SCH01", "2026-06-01", "standard")
@@ -286,13 +312,13 @@ Screenshots for submission: capture both tabs after login + occupancy lookup.
 
 Agent: *“How many seats are available on NR_SCH01 on 2026-06-15?”* → formatted occupancy block.
 
-### Testing evidence
+```bash
+python3 skeleton/validate_integration.py   # Task 6 occupancy + agent — 0 failures
+python3 skeleton/validate_rubric.py        # Live rubric B/C + Task 6 — 0 failures
+python3 skeleton/validate_ui.py            # UI handlers + Gradio server — 0 failures
+```
 
-- `python3 skeleton/validate_integration.py` — Task 6 occupancy + agent checks pass
-- UI manual: login → My Bookings tab shows Alice's BK/MT rows
-- UI manual: Seat Capacity tab → NR_SCH01 / 2026-06-01 → available count displayed
-
----
+### Example queries & expected output
 
 ## EEClass Submission Checklist (Team)
 
