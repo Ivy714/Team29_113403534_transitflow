@@ -4,7 +4,7 @@ Run once after starting Docker:
     python skeleton/seed_vectors.py
 
 This script:
-  1. Loads policy documents directly from train-mock-data/ JSON files
+  1. Loads policy chunks from train-mock-data/policy_chunks.json
   2. Embeds each document using the configured LLM provider
   3. Stores the text + vector in PostgreSQL (policy_documents table)
 
@@ -39,49 +39,7 @@ def _text(data):
 
 
 def build_documents():
-    docs = []
-
-    # refund_policy.json — one document per policy entry
-    for policy in _load("refund_policy.json"):
-        docs.append({
-            "title": policy["label"],
-            "category": "refund",
-            "source_file": "refund_policy.json",
-            "content": _text(policy),
-        })
-
-    # ticket_types.json — one document per ticket type
-    for tt in _load("ticket_types.json"):
-        docs.append({
-            "title": f"Ticket Type: {tt['display_name']}",
-            "category": "booking",
-            "source_file": "ticket_types.json",
-            "content": _text(tt),
-        })
-
-    # booking_rules.json — one document per network section
-    br = _load("booking_rules.json")
-    for section in ("national_rail", "metro", "general_rules"):
-        if section in br:
-            docs.append({
-                "title": f"Booking Rules — {section.replace('_', ' ').title()}",
-                "category": "booking",
-                "source_file": "booking_rules.json",
-                "content": _text({section: br[section]}),
-            })
-
-    # travel_policies.json — one document per network section
-    tp = _load("travel_policies.json")
-    for section in ("metro", "national_rail"):
-        if section in tp:
-            docs.append({
-                "title": f"Travel Policies — {section.replace('_', ' ').title()}",
-                "category": "conduct",
-                "source_file": "travel_policies.json",
-                "content": _text({section: tp[section]}),
-            })
-
-    return docs
+    return _load("policy_chunks.json")
 
 
 def seed():
@@ -89,7 +47,7 @@ def seed():
     print(f"📄 Embedding {len(documents)} policy documents using {llm.chat_provider}...\n")
 
     for i, doc in enumerate(documents):
-        print(f"  [{i+1}/{len(documents)}] Embedding: {doc['title']}")
+        print(f"  [{i+1}/{len(documents)}] Embedding: {doc['chunk_id']}")
 
         try:
             embedding = llm.embed(doc["content"])
@@ -100,9 +58,13 @@ def seed():
                 sys.exit(1)
 
             doc_id = store_policy_document(
+                chunk_id=doc["chunk_id"],
                 title=doc["title"],
-                category=doc["category"],
+                category=doc.get("document_type", "policy"),
+                document_type=doc.get("document_type", "policy"),
+                policy_id=doc.get("policy_id"),
                 content=doc["content"],
+                metadata=doc.get("metadata", {}),
                 embedding=embedding,
                 source_file=doc.get("source_file", ""),
             )

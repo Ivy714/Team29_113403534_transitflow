@@ -1,0 +1,1164 @@
+[
+  {
+    "chunk_id": "refund_policy_RF003",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy",
+    "title": "Metro – Single Ticket",
+    "content": "Metro single tickets are refundable only before the passenger starts the journey. If the passenger cancels before tapping in at the origin station, they receive a 100% refund with no admin fee. If the passenger has already tapped in or the journey status is completed, no refund is issued. Metro single tickets are valid only on the selected travel date. If a booking is already cancelled, no further refund action is needed.",
+    "metadata": {
+      "policy_id": "RF003",
+      "label": "Metro – Single Ticket",
+      "network_type": "metro",
+      "service_type": null,
+      "topic": "refund_policy",
+      "json_path": "$[?(@.policy_id==\"RF003\")]",
+      "rule_ids": [
+        "RF003_W1",
+        "RF003_W2"
+      ],
+      "refund_percent_options": [
+        0,
+        100
+      ],
+      "admin_fee_usd_options": [
+        0.0
+      ],
+      "related_policy_ids": [
+        "RF003"
+      ],
+      "ticket_type": [
+        "single"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF004",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy",
+    "title": "Metro – Day Pass",
+    "content": "Metro day passes are refundable only before first use. If the passenger cancels before the first tap-in on the travel date, they receive a 100% refund with no admin fee. Once the day pass has been activated by a first tap-in, no refund is issued. Metro day passes are non-transferable and valid only for the calendar day of purchase.",
+    "metadata": {
+      "policy_id": "RF004",
+      "label": "Metro – Day Pass",
+      "network_type": "metro",
+      "service_type": null,
+      "topic": "refund_policy",
+      "json_path": "$[?(@.policy_id==\"RF004\")]",
+      "rule_ids": [
+        "RF004_W1",
+        "RF004_W2"
+      ],
+      "refund_percent_options": [
+        0,
+        100
+      ],
+      "admin_fee_usd_options": [
+        0.0
+      ],
+      "related_policy_ids": [
+        "RF004"
+      ],
+      "ticket_type": [
+        "day_pass"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF001_W1",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Normal Service – Single or Return - RF001_W1",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail normal service single or return ticket 48 hours or more before scheduled departure, the passenger is entitled to a 100% refund with no admin fee. This is rule RF001_W1 under National Rail – Normal Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF001",
+      "label": "National Rail – Normal Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "normal",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF001\")].cancellation_windows[?(@.window_id==\"RF001_W1\")]",
+      "rule_id": "RF001_W1",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 48,
+      "hours_before_departure_max": null,
+      "refund_percent": 100,
+      "admin_fee_usd": 0.0,
+      "related_policy_ids": [
+        "RF001"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF001_W2",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Normal Service – Single or Return - RF001_W2",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail normal service single or return ticket between 24 and 48 hours before scheduled departure, the passenger is entitled to a 75% refund minus a $0.50 admin fee. This is rule RF001_W2 under National Rail – Normal Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF001",
+      "label": "National Rail – Normal Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "normal",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF001\")].cancellation_windows[?(@.window_id==\"RF001_W2\")]",
+      "rule_id": "RF001_W2",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 24,
+      "hours_before_departure_max": 48,
+      "refund_percent": 75,
+      "admin_fee_usd": 0.5,
+      "related_policy_ids": [
+        "RF001"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF001_W3",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Normal Service – Single or Return - RF001_W3",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail normal service single or return ticket between 2 and 24 hours before scheduled departure, the passenger is entitled to a 50% refund minus a $0.50 admin fee. This is rule RF001_W3 under National Rail – Normal Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF001",
+      "label": "National Rail – Normal Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "normal",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF001\")].cancellation_windows[?(@.window_id==\"RF001_W3\")]",
+      "rule_id": "RF001_W3",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 2,
+      "hours_before_departure_max": 24,
+      "refund_percent": 50,
+      "admin_fee_usd": 0.5,
+      "related_policy_ids": [
+        "RF001"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF001_W4",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Normal Service – Single or Return - RF001_W4",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail normal service single or return ticket between 0 and 2 hours before scheduled departure, no refund is issued. This is rule RF001_W4 under National Rail – Normal Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF001",
+      "label": "National Rail – Normal Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "normal",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF001\")].cancellation_windows[?(@.window_id==\"RF001_W4\")]",
+      "rule_id": "RF001_W4",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 0,
+      "hours_before_departure_max": 2,
+      "refund_percent": 0,
+      "admin_fee_usd": 0.0,
+      "related_policy_ids": [
+        "RF001"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF001_return_ticket_notes",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_note",
+    "title": "National Rail – Normal Service – Single or Return - return ticket notes",
+    "content": "National Rail – Normal Service – Single or Return note. For return tickets, each leg is assessed independently. If the outbound leg has already been travelled, only the return leg amount is eligible for refund, assessed against the return departure time. Use this chunk together with the matching cancellation refund rule when the user asks about return tickets, used outbound legs, unused return legs, no-shows, or cancellation exceptions. This note supports natural-language answers about how refunds are assessed.",
+    "metadata": {
+      "policy_id": "RF001",
+      "label": "National Rail – Normal Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "normal",
+      "topic": "return_ticket_refund_notes",
+      "json_path": "$[?(@.policy_id==\"RF001\")].return_ticket_notes",
+      "related_policy_ids": [
+        "RF001"
+      ],
+      "rule_type": "return_ticket_refund_notes",
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF001_no_show_policy",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_note",
+    "title": "National Rail – Normal Service – Single or Return - no show policy",
+    "content": "National Rail – Normal Service – Single or Return note. Passengers who do not travel and do not cancel in advance are treated as a no-show. No refund is issued for no-shows. Use this chunk together with the matching cancellation refund rule when the user asks about return tickets, used outbound legs, unused return legs, no-shows, or cancellation exceptions. This note supports natural-language answers about how refunds are assessed.",
+    "metadata": {
+      "policy_id": "RF001",
+      "label": "National Rail – Normal Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "normal",
+      "topic": "no_show_refund_policy",
+      "json_path": "$[?(@.policy_id==\"RF001\")].no_show_policy",
+      "related_policy_ids": [
+        "RF001"
+      ],
+      "rule_type": "no_show_refund_policy",
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF002_W1",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Express Service – Single or Return - RF002_W1",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail express service single or return ticket 48 hours or more before scheduled departure, the passenger is entitled to a 100% refund minus a $1.00 admin fee. This is rule RF002_W1 under National Rail – Express Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF002",
+      "label": "National Rail – Express Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "express",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF002\")].cancellation_windows[?(@.window_id==\"RF002_W1\")]",
+      "rule_id": "RF002_W1",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 48,
+      "hours_before_departure_max": null,
+      "refund_percent": 100,
+      "admin_fee_usd": 1.0,
+      "related_policy_ids": [
+        "RF002"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF002_W2",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Express Service – Single or Return - RF002_W2",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail express service single or return ticket between 24 and 48 hours before scheduled departure, the passenger is entitled to a 50% refund minus a $1.00 admin fee. This is rule RF002_W2 under National Rail – Express Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF002",
+      "label": "National Rail – Express Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "express",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF002\")].cancellation_windows[?(@.window_id==\"RF002_W2\")]",
+      "rule_id": "RF002_W2",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 24,
+      "hours_before_departure_max": 48,
+      "refund_percent": 50,
+      "admin_fee_usd": 1.0,
+      "related_policy_ids": [
+        "RF002"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF002_W3",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "National Rail – Express Service – Single or Return - RF002_W3",
+    "content": "Cancellation refund policy. If a passenger cancels a national rail express service single or return ticket between 0 and 24 hours before scheduled departure, no refund is issued. This is rule RF002_W3 under National Rail – Express Service – Single or Return. This applies to ticket types: single, return. Use this chunk when the user asks about cancelling a booking, cancelling a train ticket, refund before departure, refund for cancellation, money back after cancelling, or no-show refund. This rule is about voluntary cancellation before departure. It is not delay compensation for a late or delayed train.",
+    "metadata": {
+      "policy_id": "RF002",
+      "label": "National Rail – Express Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "express",
+      "topic": "cancellation_refund",
+      "json_path": "$[?(@.policy_id==\"RF002\")].cancellation_windows[?(@.window_id==\"RF002_W3\")]",
+      "rule_id": "RF002_W3",
+      "rule_type": "cancellation_refund",
+      "hours_before_departure_min": 0,
+      "hours_before_departure_max": 24,
+      "refund_percent": 0,
+      "admin_fee_usd": 0.0,
+      "related_policy_ids": [
+        "RF002"
+      ],
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF002_return_ticket_notes",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_note",
+    "title": "National Rail – Express Service – Single or Return - return ticket notes",
+    "content": "National Rail – Express Service – Single or Return note. Same as normal service: each leg assessed independently against its own departure time. Use this chunk together with the matching cancellation refund rule when the user asks about return tickets, used outbound legs, unused return legs, no-shows, or cancellation exceptions. This note supports natural-language answers about how refunds are assessed.",
+    "metadata": {
+      "policy_id": "RF002",
+      "label": "National Rail – Express Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "express",
+      "topic": "return_ticket_refund_notes",
+      "json_path": "$[?(@.policy_id==\"RF002\")].return_ticket_notes",
+      "related_policy_ids": [
+        "RF002"
+      ],
+      "rule_type": "return_ticket_refund_notes",
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF002_no_show_policy",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_note",
+    "title": "National Rail – Express Service – Single or Return - no show policy",
+    "content": "National Rail – Express Service – Single or Return note. No refund issued for no-shows on express services. Use this chunk together with the matching cancellation refund rule when the user asks about return tickets, used outbound legs, unused return legs, no-shows, or cancellation exceptions. This note supports natural-language answers about how refunds are assessed.",
+    "metadata": {
+      "policy_id": "RF002",
+      "label": "National Rail – Express Service – Single or Return",
+      "network_type": "national_rail",
+      "service_type": "express",
+      "topic": "no_show_refund_policy",
+      "json_path": "$[?(@.policy_id==\"RF002\")].no_show_policy",
+      "related_policy_ids": [
+        "RF002"
+      ],
+      "rule_type": "no_show_refund_policy",
+      "ticket_type": [
+        "single",
+        "return"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF005_RF005_R1",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "Delay Compensation – All Networks - RF005_R1",
+    "content": "Delay compensation policy. If a passenger’s train is delayed by 30–59 minutes due to operator fault, the passenger is entitled to a 50% refund of the fare for the delayed leg. The passenger must submit the compensation claim through the app or customer service within 28 days of the travel date. This is rule RF005_R1 under RF005. Use this chunk when the user asks: my train was delayed, train was late, late train refund, delay compensation, compensation for 45 minutes late, refund for delay, reimbursement, money back for a delayed train. This applies only when the delay is due to operator fault; third-party events and extreme weather are exclusions.",
+    "metadata": {
+      "policy_id": "RF005",
+      "label": "Delay Compensation – All Networks",
+      "network_type": "all",
+      "service_type": null,
+      "topic": "delay_compensation",
+      "json_path": "$[?(@.policy_id==\"RF005\")].compensation_rules[?(@.rule_id==\"RF005_R1\")]",
+      "rule_id": "RF005_R1",
+      "rule_type": "delay_compensation",
+      "delay_min_minutes": 30,
+      "delay_max_minutes": 59,
+      "refund_percent": 50,
+      "admin_fee_usd": 0.0,
+      "alternative_transport_reimbursement_usd": null,
+      "claim_deadline_days": 28,
+      "related_policy_ids": [
+        "RF005"
+      ],
+      "ticket_type": [
+        "single",
+        "return",
+        "day_pass"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF005_RF005_R2",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "Delay Compensation – All Networks - RF005_R2",
+    "content": "Delay compensation policy. If a passenger’s train is delayed by 60–119 minutes due to operator fault, the passenger is entitled to a 100% refund of the fare for the delayed leg. The passenger must submit the compensation claim through the app or customer service within 28 days of the travel date. This is rule RF005_R2 under RF005. Use this chunk when the user asks: my train was delayed, train was late, late train refund, delay compensation, compensation for 45 minutes late, refund for delay, reimbursement, money back for a delayed train. This applies only when the delay is due to operator fault; third-party events and extreme weather are exclusions.",
+    "metadata": {
+      "policy_id": "RF005",
+      "label": "Delay Compensation – All Networks",
+      "network_type": "all",
+      "service_type": null,
+      "topic": "delay_compensation",
+      "json_path": "$[?(@.policy_id==\"RF005\")].compensation_rules[?(@.rule_id==\"RF005_R2\")]",
+      "rule_id": "RF005_R2",
+      "rule_type": "delay_compensation",
+      "delay_min_minutes": 60,
+      "delay_max_minutes": 119,
+      "refund_percent": 100,
+      "admin_fee_usd": 0.0,
+      "alternative_transport_reimbursement_usd": null,
+      "claim_deadline_days": 28,
+      "related_policy_ids": [
+        "RF005"
+      ],
+      "ticket_type": [
+        "single",
+        "return",
+        "day_pass"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF005_RF005_R3",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_rule",
+    "title": "Delay Compensation – All Networks - RF005_R3",
+    "content": "Delay compensation policy. If a passenger’s train is delayed by 120 minutes or more due to operator fault, the passenger is entitled to a 100% refund of the fare for the delayed leg plus reimbursement of alternative transport costs up to $10.00. The passenger must submit the compensation claim through the app or customer service within 28 days of the travel date. This is rule RF005_R3 under RF005. Use this chunk when the user asks: my train was delayed, train was late, late train refund, delay compensation, compensation for 45 minutes late, refund for delay, reimbursement, money back for a delayed train. This applies only when the delay is due to operator fault; third-party events and extreme weather are exclusions.",
+    "metadata": {
+      "policy_id": "RF005",
+      "label": "Delay Compensation – All Networks",
+      "network_type": "all",
+      "service_type": null,
+      "topic": "delay_compensation",
+      "json_path": "$[?(@.policy_id==\"RF005\")].compensation_rules[?(@.rule_id==\"RF005_R3\")]",
+      "rule_id": "RF005_R3",
+      "rule_type": "delay_compensation",
+      "delay_min_minutes": 120,
+      "delay_max_minutes": null,
+      "refund_percent": 100,
+      "admin_fee_usd": 0.0,
+      "alternative_transport_reimbursement_usd": 10.0,
+      "claim_deadline_days": 28,
+      "related_policy_ids": [
+        "RF005"
+      ],
+      "ticket_type": [
+        "single",
+        "return",
+        "day_pass"
+      ]
+    }
+  },
+  {
+    "chunk_id": "refund_policy_RF005_notes",
+    "source_file": "refund_policy.json",
+    "document_type": "refund_policy_note",
+    "title": "Delay Compensation – All Networks - exclusions",
+    "content": "Delay compensation exclusion policy. Delays caused by third-party events (extreme weather, security incidents, government directives, or passenger-caused incidents) are not eligible for compensation. Delay compensation applies only when the train delay is due to operator fault. Use this chunk when the user asks whether weather, security incidents, government directives, passenger incidents, or non-operator causes still qualify for compensation. This chunk helps distinguish ordinary delay compensation from non-eligible delay causes.",
+    "metadata": {
+      "policy_id": "RF005",
+      "label": "Delay Compensation – All Networks",
+      "network_type": "all",
+      "service_type": null,
+      "topic": "delay_compensation_exclusion",
+      "rule_type": "delay_compensation_exclusion",
+      "json_path": "$[?(@.policy_id==\"RF005\")].exclusions",
+      "related_policy_ids": [
+        "RF005"
+      ],
+      "ticket_type": [
+        "single",
+        "return",
+        "day_pass"
+      ]
+    }
+  },
+  {
+    "chunk_id": "booking_rules_national_rail_advance_booking",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "national_rail - advance_booking",
+    "content": "National Rail tickets may be booked up to 90 days in advance. Tickets may also be booked as late as 10 minutes before scheduled departure, subject to seat availability. Early booking is recommended for express services and first class because capacity is limited.",
+    "metadata": {
+      "network_type": "national_rail",
+      "topic": "advance_booking",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.advance_booking"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_national_rail_seat_selection",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "national_rail - seat_selection",
+    "content": "National Rail seat selection depends on fare class. First-class passengers may select a seat for free; seat selection is included at no extra charge for all first-class bookings. Standard-class passengers may optionally select a seat for a $0.50 fee. If a standard-class passenger does not choose a seat, one will be assigned at check-in subject to availability. Window and aisle seats depend on availability at booking time.",
+    "metadata": {
+      "network_type": "national_rail",
+      "topic": "seat_selection",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.seat_selection"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_national_rail_ticket_changes",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "national_rail - ticket_changes",
+    "content": "National Rail tickets can be changed if the request is made at least 24 hours before the scheduled departure of the service being changed. A $1.00 change fee applies. Passengers may change the travel date, scheduled service on the same route, or seat selection. Passengers may not change the route, fare class, or ticket type. Changes can be made through the app, website, or staffed ticket counter. Express service bookings cannot be changed within 24 hours of departure.",
+    "metadata": {
+      "network_type": "national_rail",
+      "topic": "ticket_changes",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.ticket_changes"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_national_rail_child_fares",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "national_rail - child_fares",
+    "content": "National Rail child fares depend on age. Children under 5 travel free when accompanied by a fare-paying adult and do not need a ticket. Children aged 5 to 15 inclusive pay 50% of the applicable adult fare, calculated using the same stops-based formula. Passengers aged 16 and over pay the full adult fare. Proof of age may be requested on board; accepted proof includes a valid ID, school card, or birth certificate.",
+    "metadata": {
+      "network_type": "national_rail",
+      "topic": "child_fares",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.child_fares"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_national_rail_group_fares",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "national_rail - group_fares",
+    "content": "National Rail group discounts apply to standard class single and return tickets when 10 or more tickets are purchased in one transaction. The group discount is 10%. All group members must travel on the same service. The discount does not apply to first class tickets, express services, or day passes.",
+    "metadata": {
+      "network_type": "national_rail",
+      "topic": "group_fares",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.group_fares"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_national_rail_payment",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "national_rail - payment",
+    "content": "National Rail bookings accept credit card, debit card, and e-wallet payments. Full payment is required at the time of booking. All fares are charged in USD.",
+    "metadata": {
+      "network_type": "national_rail",
+      "topic": "payment",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.payment"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_national_rail_booking_confirmation",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "national_rail - booking_confirmation",
+    "content": "National Rail booking confirmation is sent immediately by email and in-app notification. Tickets are digital QR-code tickets displayed in the app or printable as a PDF. No physical ticket is required. Passengers should present the QR code to platform staff or scan it at the gate before boarding.",
+    "metadata": {
+      "network_type": "national_rail",
+      "topic": "booking_confirmation",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.booking_confirmation"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_metro_advance_booking",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "metro - advance_booking",
+    "content": "Metro tickets are purchased on the day of travel only. Advance booking is not available for metro single tickets or metro day passes. A metro day pass is valid from 00:00 to 23:59 on the date of purchase. Metro tickets can be purchased through the app or at station ticket machines.",
+    "metadata": {
+      "network_type": "metro",
+      "topic": "advance_booking",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.advance_booking"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_metro_seat_selection",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "metro - seat_selection",
+    "content": "Metro services do not offer reserved seating. Passengers board the train and use any available seat freely.",
+    "metadata": {
+      "network_type": "metro",
+      "topic": "seat_selection",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.seat_selection"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_metro_ticket_changes",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "metro - ticket_changes",
+    "content": "Metro tickets cannot be changed. If a passenger needs a different metro ticket, they must request a refund where eligible and purchase a new ticket. Metro single ticket refunds follow RF003, and metro day pass refunds follow RF004.",
+    "metadata": {
+      "network_type": "metro",
+      "topic": "ticket_changes",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [
+        "RF003",
+        "RF004"
+      ],
+      "json_path": "$.metro.ticket_changes"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_metro_child_fares",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "metro - child_fares",
+    "content": "Metro child fares depend on age. Children under 5 travel free when accompanied by a fare-paying adult and do not need a ticket. Children aged 5 to 15 inclusive pay 50% of the calculated stops-based fare, rounded to the nearest $0.10. A metro day pass is available at 50% for this age group, costing $2.50. Passengers aged 16 and over pay the full adult fare. Proof of age may be requested on board.",
+    "metadata": {
+      "network_type": "metro",
+      "topic": "child_fares",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.child_fares"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_metro_group_fares",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "metro - group_fares",
+    "content": "Metro services do not offer group discounts.",
+    "metadata": {
+      "network_type": "metro",
+      "topic": "group_fares",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.group_fares"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_metro_payment",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "metro - payment",
+    "content": "Metro tickets accept credit card, debit card, and e-wallet payments. Full payment is required at the time of purchase. All fares are charged in USD.",
+    "metadata": {
+      "network_type": "metro",
+      "topic": "payment",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.payment"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_metro_booking_confirmation",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "metro - booking_confirmation",
+    "content": "Metro ticket confirmation is sent in the app immediately after purchase. The ticket is a digital QR code displayed in the app. Passengers tap the QR code at the station gate scanner to begin the journey.",
+    "metadata": {
+      "network_type": "metro",
+      "topic": "booking_confirmation",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.booking_confirmation"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_general_rules_valid_id",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "general_rules - valid_id",
+    "content": "General booking rule: valid_id. Passengers may be asked to show a valid photo ID matching the name on the booking. Accepted IDs include national ID card, passport, and driving licence.",
+    "metadata": {
+      "network_type": "all",
+      "topic": "valid_id",
+      "section": "general_rules",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.general_rules.valid_id"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_general_rules_ticket_validity",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "general_rules - ticket_validity",
+    "content": "General booking rule: ticket_validity. A ticket is only valid for the service, date, and passenger named on the booking. Tickets are non-transferable.",
+    "metadata": {
+      "network_type": "all",
+      "topic": "ticket_validity",
+      "section": "general_rules",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.general_rules.ticket_validity"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_general_rules_fraud",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "general_rules - fraud",
+    "content": "General booking rule: fraud. Use of another person's ticket, presentation of a counterfeit ticket, or deliberate fare evasion may result in a penalty fare, removal from the service, and/or legal action.",
+    "metadata": {
+      "network_type": "all",
+      "topic": "fraud",
+      "section": "general_rules",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.general_rules.fraud"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_general_rules_lost_tickets",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "general_rules - lost_tickets",
+    "content": "General booking rule: lost_tickets. Digital tickets can be retrieved via the app at any time using the booking reference. Passengers are advised to screenshot their QR code before travel in case of connectivity issues.",
+    "metadata": {
+      "network_type": "all",
+      "topic": "lost_tickets",
+      "section": "general_rules",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.general_rules.lost_tickets"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_general_rules_customer_service",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "general_rules - customer_service",
+    "content": "General booking rule: customer_service. Passengers with queries or complaints may contact customer service via the in-app chat, email, or station help desks. Response time is within 2 business days.",
+    "metadata": {
+      "network_type": "all",
+      "topic": "customer_service",
+      "section": "general_rules",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.general_rules.customer_service"
+    }
+  },
+  {
+    "chunk_id": "booking_rules_general_rules_dispute_resolution",
+    "source_file": "booking_rules.json",
+    "document_type": "booking_rule",
+    "title": "general_rules - dispute_resolution",
+    "content": "General booking rule: dispute_resolution. If a passenger disagrees with a refund decision, they may escalate the case to the customer service team within 14 days of the original decision.",
+    "metadata": {
+      "network_type": "all",
+      "topic": "dispute_resolution",
+      "section": "general_rules",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.general_rules.dispute_resolution"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_metro_bicycles",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "metro - bicycles",
+    "content": "Metro Bicycle Policy. Foldable bicycles are permitted on metro services only outside peak hours. Foldable bicycles are not permitted during weekday peak hours, 07:00–09:30 and 17:00–20:00 Monday to Friday, even if folded. There is no fee for foldable bicycles. The maximum folded size is 90 × 45 × 30 cm. Passengers must keep foldable bicycles with them and must not block aisles or doors. Standard non-foldable bicycles are not permitted on the metro at any time. Electric scooters and hoverboards are prohibited on all metro services due to fire safety regulations.",
+    "metadata": {
+      "network_type": "metro",
+      "policy_category": "bicycles",
+      "topic": "bicycles",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.bicycles"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_metro_luggage",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "metro - luggage",
+    "content": "Metro passengers may bring up to 2 luggage items. Each item must be no larger than 70 × 50 × 30 cm. Oversized items are not permitted during weekday peak hours, 07:00–09:30 and 17:00–20:00. All luggage must be held by the passenger or placed in the luggage area at the ends of the carriage. Luggage must not block seats, aisles, or doors.",
+    "metadata": {
+      "network_type": "metro",
+      "policy_category": "luggage",
+      "topic": "luggage",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.luggage"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_metro_pets",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "metro - pets",
+    "content": "Metro Pet Policy. Small pets are permitted on the metro only if they are in fully enclosed hard or soft carriers. The maximum carrier size is 50 × 35 × 25 cm. There is no pet fee. Pets must not occupy a seat. Guide dogs and registered assistance animals are permitted at all times without a carrier. Dogs that are not in carriers are not permitted on the metro, even if they are on a lead.",
+    "metadata": {
+      "network_type": "metro",
+      "policy_category": "pets",
+      "topic": "pets",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.pets"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_metro_food_and_drink",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "metro - food_and_drink",
+    "content": "Metro Food and Drink Policy. Sealed drinks are permitted. Hot food and strong-smelling food are not permitted. Eating is discouraged on the metro, and passengers must not leave litter. Alcohol consumption is not permitted on metro services or at stations.",
+    "metadata": {
+      "network_type": "metro",
+      "policy_category": "food_and_drink",
+      "topic": "food_and_drink",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.food_and_drink"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_metro_priority_seating",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "metro - priority_seating",
+    "content": "Metro priority seats are marked with a yellow priority sign. These seats are reserved for elderly passengers aged 65 and over, pregnant passengers, passengers with disabilities, and passengers travelling with young children. Other passengers must vacate priority seats immediately when requested.",
+    "metadata": {
+      "network_type": "metro",
+      "policy_category": "priority_seating",
+      "topic": "priority_seating",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.priority_seating"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_metro_prohibited_items",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "metro - prohibited_items",
+    "content": "Metro prohibited items include flammable or explosive materials, weapons of any kind, standard non-foldable bicycles, e-scooters, hoverboards, and items emitting strong odours that may cause discomfort to other passengers.",
+    "metadata": {
+      "network_type": "metro",
+      "policy_category": "prohibited_items",
+      "topic": "prohibited_items",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.prohibited_items"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_metro_smoking_and_vaping",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "metro - smoking_and_vaping",
+    "content": "Smoking and vaping are strictly prohibited on all metro carriages, platforms, and station concourses.",
+    "metadata": {
+      "network_type": "metro",
+      "policy_category": "smoking_and_vaping",
+      "topic": "smoking_and_vaping",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.smoking_and_vaping"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_metro_noise",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "metro - noise",
+    "content": "Metro passengers should keep noise to a considerate level. Personal audio devices may be used only with headphones; external speakers are not permitted.",
+    "metadata": {
+      "network_type": "metro",
+      "policy_category": "noise",
+      "topic": "noise",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.metro.noise"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_national_rail_bicycles",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "national_rail - bicycles",
+    "content": "National Rail Bicycle Policy. Foldable bicycles are permitted on national rail services at all times. There are no peak-hour restrictions for foldable bicycles and there is no additional fee. Folded bicycles must be stored in the overhead rack or in the space at the end of the carriage. The maximum folded size is 90 × 45 × 30 cm. Standard bicycles are permitted only in designated bicycle bays. A maximum of 2 standard bicycles are allowed per train. Standard bicycles are not permitted during weekday peak hours, 07:00–09:30 and 16:30–19:00 Monday to Friday. A $2 bicycle fee applies. Bicycle spaces are first-come-first-served and cannot be reserved in advance. Bicycles must be placed in the designated bicycle bay and passengers remain responsible for them. Electric scooters and hoverboards are not permitted on national rail services.",
+    "metadata": {
+      "network_type": "national_rail",
+      "policy_category": "bicycles",
+      "topic": "bicycles",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.bicycles"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_national_rail_luggage",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "national_rail - luggage",
+    "content": "National Rail passengers may bring up to 3 luggage items. Items should fit in the overhead luggage rack above seats where possible. There is no formal size restriction, but luggage must not inconvenience other passengers. Oversized items such as large suitcases should be placed in dedicated luggage areas at the ends of each carriage. There is no storage fee. Passengers are responsible for their own luggage, and the operator is not liable for lost or damaged luggage.",
+    "metadata": {
+      "network_type": "national_rail",
+      "policy_category": "luggage",
+      "topic": "luggage",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.luggage"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_national_rail_pets",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "national_rail - pets",
+    "content": "National Rail Pet Policy. Guide dogs and registered assistance dogs are permitted at all times in all coaches at no charge. Other dogs are permitted if they remain on a lead at all times, but they are allowed only in standard class coaches. Dogs must not occupy seats, and there is no fee. Small animals in enclosed carriers are permitted in standard class but are not permitted in first class coaches. Large animals are not permitted unless they are registered assistance animals.",
+    "metadata": {
+      "network_type": "national_rail",
+      "policy_category": "pets",
+      "topic": "pets",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.pets"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_national_rail_food_and_drink",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "national_rail - food_and_drink",
+    "content": "National Rail Food and Drink Policy. Food and drink are permitted in all coaches. A refreshment trolley operates on selected services, so passengers should check the service schedule for availability. Alcohol is permitted in moderation, but passengers behaving disruptively due to alcohol may be asked to leave the train. Complimentary beverages are not provided in first class; passengers may bring their own food and drink.",
+    "metadata": {
+      "network_type": "national_rail",
+      "policy_category": "food_and_drink",
+      "topic": "food_and_drink",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.food_and_drink"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_national_rail_quiet_zones",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "national_rail - quiet_zones",
+    "content": "National Rail quiet zones are available in selected standard class carriages. Phone calls, loud music, and disruptive noise are not permitted in quiet zones. Quiet zone carriages are marked with a quiet zone symbol on the door and inside the carriage. Passengers who prefer a quiet journey should check carriage markings before boarding.",
+    "metadata": {
+      "network_type": "national_rail",
+      "policy_category": "quiet_zones",
+      "topic": "quiet_zones",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.quiet_zones"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_national_rail_priority_seating",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "national_rail - priority_seating",
+    "content": "National Rail priority seats are available in all coaches and are marked with a blue priority sign. Priority seats are reserved for elderly passengers aged 65 and over, pregnant passengers, passengers with disabilities, and passengers travelling with young children. Other passengers must vacate priority seats when requested.",
+    "metadata": {
+      "network_type": "national_rail",
+      "policy_category": "priority_seating",
+      "topic": "priority_seating",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.priority_seating"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_national_rail_accessibility",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "national_rail - accessibility",
+    "content": "National Rail accessibility support is available for passengers with mobility needs. All national rail stations are wheelchair accessible. Ramps are available on request from platform staff. Passengers requiring assisted boarding should contact customer service at least 24 hours before travel. Passengers with mobility difficulties may board first after informing platform staff.",
+    "metadata": {
+      "network_type": "national_rail",
+      "policy_category": "accessibility",
+      "topic": "accessibility",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.accessibility"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_national_rail_prohibited_items",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "national_rail - prohibited_items",
+    "content": "National Rail prohibited items include flammable or explosive materials, weapons of any kind, e-scooters, hoverboards, and items emitting strong odours that may cause discomfort to other passengers.",
+    "metadata": {
+      "network_type": "national_rail",
+      "policy_category": "prohibited_items",
+      "topic": "prohibited_items",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.prohibited_items"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_national_rail_smoking_and_vaping",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "national_rail - smoking_and_vaping",
+    "content": "Smoking and vaping are strictly prohibited on all national rail train carriages and station platforms.",
+    "metadata": {
+      "network_type": "national_rail",
+      "policy_category": "smoking_and_vaping",
+      "topic": "smoking_and_vaping",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.smoking_and_vaping"
+    }
+  },
+  {
+    "chunk_id": "travel_policies_national_rail_conduct",
+    "source_file": "travel_policies.json",
+    "document_type": "travel_policy",
+    "title": "national_rail - conduct",
+    "content": "national_rail travel policy: conduct. Passengers behaving in a manner that causes distress or danger to other passengers or staff may be removed from the train. In serious cases, the operator reserves the right to involve law enforcement.",
+    "metadata": {
+      "network_type": "national_rail",
+      "policy_category": "conduct",
+      "topic": "conduct",
+      "last_updated": "2024-01-01",
+      "version": "1.0",
+      "related_policy_ids": [],
+      "json_path": "$.national_rail.conduct"
+    }
+  },
+  {
+    "chunk_id": "ticket_types_single_metro",
+    "source_file": "ticket_types.json",
+    "document_type": "ticket_type",
+    "title": "Single Ticket - metro",
+    "content": "A Metro single ticket is a one-way ticket for one journey between an origin and destination station on the metro network. It is valid only on the selected travel date and expires at midnight. The fare is stops-based: amount equals the base fare plus stops travelled times the per-stop rate. For example, a 3-stop journey costs $1.70. Metro single tickets do not include seat assignment, cannot be bought in advance, cannot be changed, and are refundable under refund rule RF003 before the journey begins.",
+    "metadata": {
+      "ticket_type": "single",
+      "network_type": "metro",
+      "available_on": [
+        "metro",
+        "national_rail"
+      ],
+      "topic": "ticket_type",
+      "refund_rule": "RF003",
+      "related_policy_ids": [
+        "RF003"
+      ],
+      "advance_purchase": false,
+      "changes_allowed": false,
+      "seat_assignment": false,
+      "json_path": "$[?(@.ticket_type==\"single\")].metro"
+    }
+  },
+  {
+    "chunk_id": "ticket_types_single_national_rail",
+    "source_file": "ticket_types.json",
+    "document_type": "ticket_type",
+    "title": "Single Ticket - national_rail",
+    "content": "A National Rail single ticket is a one-way ticket for one journey between an origin and destination station on the national rail network. It is valid only on the selected travel date and scheduled service, and it is not valid on a different service unless changed with a fee. Pricing is stops-based and varies by fare class and service type. Standard and first class are available. Seat assignment is required. Tickets may be purchased up to 90 days in advance and can be changed at least 24 hours before scheduled departure with a $1.00 change fee. Refunds follow RF001 for normal services and RF002 for express services.",
+    "metadata": {
+      "ticket_type": "single",
+      "network_type": "national_rail",
+      "available_on": [
+        "metro",
+        "national_rail"
+      ],
+      "topic": "ticket_type",
+      "refund_rule": "RF001 (normal service), RF002 (express service)",
+      "related_policy_ids": [
+        "RF001",
+        "RF002"
+      ],
+      "advance_purchase": true,
+      "changes_allowed": true,
+      "seat_assignment": true,
+      "json_path": "$[?(@.ticket_type==\"single\")].national_rail"
+    }
+  },
+  {
+    "chunk_id": "ticket_types_return_national_rail",
+    "source_file": "ticket_types.json",
+    "document_type": "ticket_type",
+    "title": "Return Ticket - national_rail",
+    "content": "A National Rail return ticket covers two legs: an outbound journey and a return journey on the same route. Each leg is priced and assessed independently using stops-based pricing for the booked fare class. Standard and first class are available, and seat assignment is required. The outbound leg is valid only for the selected outbound date and scheduled service. The return leg is valid on any scheduled service on the same route within 30 days of the outbound travel date. Return tickets may be purchased up to 90 days in advance and may be changed at least 24 hours before the leg being changed with a $1.00 change fee. Refunds follow RF001 for normal services and RF002 for express services, with each leg assessed separately. If the outbound leg has already been travelled, only the return leg may be eligible for cancellation and refund.",
+    "metadata": {
+      "ticket_type": "return",
+      "network_type": "national_rail",
+      "available_on": [
+        "national_rail"
+      ],
+      "topic": "ticket_type",
+      "refund_rule": "RF001 (normal service), RF002 (express service). Each leg is assessed separately.",
+      "related_policy_ids": [
+        "RF001",
+        "RF002"
+      ],
+      "advance_purchase": true,
+      "changes_allowed": true,
+      "seat_assignment": true,
+      "json_path": "$[?(@.ticket_type==\"return\")].national_rail"
+    }
+  },
+  {
+    "chunk_id": "ticket_types_day_pass_metro",
+    "source_file": "ticket_types.json",
+    "document_type": "ticket_type",
+    "title": "Metro Day Pass - metro",
+    "content": "A Metro Day Pass allows unlimited travel on all metro lines M1, M2, M3, and M4 for one full calendar day. It is not valid on national rail services. The price is a flat rate of $5.00. It has no fare class and no seat assignment. It is valid from 00:00 to 23:59 on the calendar day of purchase and cannot be used on a different date. It cannot be purchased in advance, cannot be changed, and is non-transferable. It is refundable under RF004 before first use. A day pass is usually better value than individual single tickets for passengers making 3 or more metro trips in a day. Passengers tap in and out normally at each station.",
+    "metadata": {
+      "ticket_type": "day_pass",
+      "network_type": "metro",
+      "available_on": [
+        "metro"
+      ],
+      "topic": "ticket_type",
+      "refund_rule": "RF004",
+      "related_policy_ids": [
+        "RF004"
+      ],
+      "advance_purchase": false,
+      "changes_allowed": false,
+      "seat_assignment": false,
+      "json_path": "$[?(@.ticket_type==\"day_pass\")].metro"
+    }
+  }
+]

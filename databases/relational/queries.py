@@ -11,6 +11,7 @@ TWO ROLES ARE SERVED HERE:
 
 from __future__ import annotations
 
+import json
 import random
 import string
 from datetime import datetime, timezone
@@ -372,6 +373,7 @@ def query_user_bookings(user_email: str) -> dict:
         JOIN national_rail_stations o_st ON o_st.station_id = b.origin_station_id
         JOIN national_rail_stations d_st ON d_st.station_id = b.destination_station_id
         WHERE j.user_id = %s
+        AND j.status != 'cancelled'
         ORDER BY b.travel_date DESC, b.booked_at DESC
     """
 
@@ -605,6 +607,7 @@ def execute_booking(
 
             return True, {
                 "booking_id": booking_id,
+                "user_id": user_id,
                 "payment_id": payment_id,
                 "schedule_id": schedule_id,
                 "origin_station_id": origin_station_id,
@@ -749,6 +752,7 @@ def execute_cancellation(booking_id: str, user_id: str) -> tuple[bool, dict | st
             return True, {
                 "booking_id": booking_id,
                 "original_amount_usd": amount,
+                "refund_amount": refund_amount,
                 "refund_amount_usd": refund_amount,
                 "admin_fee_usd": admin_fee,
                 "policy_note": note,
@@ -785,9 +789,16 @@ def register_user(
                 return False, f"Email {email} is already registered."
 
             # Generate a sequential user_id (e.g. RU01, RU02...)
-            cur.execute("SELECT COUNT(*) FROM users")
-            count = cur.fetchone()[0]
-            user_id = f"RU{count + 1:02d}"
+            cur.execute("""
+                SELECT COALESCE(
+                    MAX(CAST(SUBSTRING(user_id FROM 3) AS INTEGER)),
+                    0
+                )
+                FROM users
+                WHERE user_id LIKE 'RU%'
+            """)
+            max_user_num = cur.fetchone()[0]
+            user_id = f"RU{max_user_num + 1:02d}"
 
             # Insert the core user profile row
             registered_at = datetime.now(timezone.utc)
@@ -816,9 +827,16 @@ def register_user(
             # Hash the secret answer the same way; store case-folded so verification
             # is case-insensitive without storing the raw answer.
             sq_hash = _hash_password(secret_answer.lower())
-            cur.execute("SELECT COUNT(*) FROM user_security_questions")
-            sq_count = cur.fetchone()[0]
-            sq_id = f"SQ{sq_count + 1:03d}"
+            cur.execute("""
+                SELECT COALESCE(
+                    MAX(CAST(SUBSTRING(security_question_id FROM 3) AS INTEGER)),
+                    0
+                )
+                FROM user_security_questions
+                WHERE security_question_id LIKE 'SQ%'
+            """)
+            max_sq_num = cur.fetchone()[0]
+            sq_id = f"SQ{max_sq_num + 1:03d}"
             cur.execute(
                 """
                 INSERT INTO user_security_questions
@@ -988,17 +1006,46 @@ def store_policy_document(
     content: str,
     embedding: list[float],
     source_file: str = "",
+    chunk_id: str | None = None,
+    document_type: str | None = None,
+    policy_id: str | None = None,
+    metadata: dict | None = None,
 ) -> int:
-    """Insert a policy document with its embedding into the database."""
+    """Insert or update a policy document with its embedding into the database."""
     sql = """
-        INSERT INTO policy_documents (title, category, content, embedding, source_file)
-        VALUES (%s, %s, %s, %s::vector, %s)
+        INSERT INTO policy_documents
+            (chunk_id, title, category, document_type, policy_id, content, metadata, embedding, source_file)
+        VALUES
+            (%s, %s, %s, %s, %s, %s, %s, %s::vector, %s)
+        ON CONFLICT (chunk_id) DO UPDATE SET
+            title = EXCLUDED.title,
+            category = EXCLUDED.category,
+            document_type = EXCLUDED.document_type,
+            policy_id = EXCLUDED.policy_id,
+            content = EXCLUDED.content,
+            metadata = EXCLUDED.metadata,
+            embedding = EXCLUDED.embedding,
+            source_file = EXCLUDED.source_file
         RETURNING id
     """
     vec_str = "[" + ",".join(str(x) for x in embedding) + "]"
+
     with _connect() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (title, category, content, vec_str, source_file))
+            cur.execute(
+                sql,
+                (
+                    chunk_id,
+                    title,
+                    category,
+                    document_type,
+                    policy_id,
+                    content,
+                    json.dumps(metadata or {}),
+                    vec_str,
+                    source_file,
+                ),
+            )
             return cur.fetchone()[0]
 
 

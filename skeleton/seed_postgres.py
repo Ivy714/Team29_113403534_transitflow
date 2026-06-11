@@ -383,10 +383,16 @@ def seed_users(cur):
     for u in data:
         pw_hash = _hash(u["password"])
         creds.append((u["user_id"], pw_hash, "argon2id"))
-    insert_many(
+    execute_values(
         cur,
-        "user_credentials",
-        ["user_id", "password_hash", "hash_algorithm"],
+        """
+        INSERT INTO user_credentials (user_id, password_hash, hash_algorithm)
+        VALUES %s
+        ON CONFLICT (user_id) DO UPDATE
+        SET password_hash = EXCLUDED.password_hash,
+            hash_algorithm = EXCLUDED.hash_algorithm,
+            updated_at = now()
+        """,
         creds,
     )
 
