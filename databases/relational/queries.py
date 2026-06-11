@@ -373,6 +373,7 @@ def query_user_bookings(user_email: str) -> dict:
         JOIN national_rail_stations o_st ON o_st.station_id = b.origin_station_id
         JOIN national_rail_stations d_st ON d_st.station_id = b.destination_station_id
         WHERE j.user_id = %s
+        AND j.status != 'cancelled'
         ORDER BY b.travel_date DESC, b.booked_at DESC
     """
 

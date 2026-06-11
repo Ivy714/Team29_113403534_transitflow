@@ -143,7 +143,7 @@ def do_login(email: str, password: str):
             gr.update(visible=True),
         )
 
-    user = login_user(email.strip(), password)
+    user = login_user(email.strip(), password.strip())
     if user is None:
         return (
             gr.update(value="Incorrect email or password.", visible=True),
