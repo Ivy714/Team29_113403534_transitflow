@@ -459,9 +459,9 @@ CREATE TABLE journeys (
 -- The three-part FK (layout_id, coach, seat_id) links to the
 -- physical seat in the seat inventory tables.
 --
--- The UNIQUE constraint on (schedule_id, travel_date, departure_time,
--- coach, seat_id) prevents double-booking the same seat on the same
--- departure.
+-- Seat double-booking is enforced in execute_booking() by checking bookings
+-- joined with journeys and excluding cancelled journeys. This keeps cancelled
+-- bookings as history while allowing the seat to be reused after cancellation.
 -- =============================================================
 
 CREATE TABLE bookings (
@@ -479,7 +479,6 @@ CREATE TABLE bookings (
     booked_at               TIMESTAMPTZ     NOT NULL,
     travelled_at            TIMESTAMPTZ,
     FOREIGN KEY (layout_id, coach, seat_id) REFERENCES seats(layout_id, coach, seat_id) ON DELETE RESTRICT,
-    UNIQUE (schedule_id, travel_date, departure_time, coach, seat_id),
     CHECK (origin_station_id <> destination_station_id),
     CHECK (travelled_at IS NULL OR travelled_at::date >= travel_date)
 );
