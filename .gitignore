@@ -59,3 +59,7 @@ gradio_cached_examples/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Work Allocation — submit via EEClass only; do not commit to GitHub (course policy)
+Team29_WORK_ALLOCATION.md
+*_WORK_ALLOCATION.md
