@@ -14,15 +14,27 @@ Students: You do NOT need to change this file.
 
 from __future__ import annotations
 import requests
-from typing import List
-from google import genai
-from google.genai import types
+from typing import Any, List, Optional, Tuple
 
 from skeleton.config import (
     LLM_PROVIDER,
     GEMINI_API_KEY, GEMINI_CHAT_MODEL, GEMINI_EMBED_MODEL, GEMINI_EMBED_DIM,
     OLLAMA_BASE_URL, OLLAMA_CHAT_MODEL, OLLAMA_EMBED_MODEL, OLLAMA_EMBED_DIM, OLLAMA_TIMEOUT,
 )
+
+
+def _import_gemini() -> Tuple[Any, Any]:
+    """Lazy import so Ollama-only installs do not require google-genai."""
+    try:
+        from google import genai
+        from google.genai import types
+
+        return genai, types
+    except ImportError as e:
+        raise ImportError(
+            "Gemini support requires google-genai. "
+            "Run: pip install google-genai"
+        ) from e
 
 
 class LLMProvider:
@@ -50,6 +62,7 @@ class LLMProvider:
                     "GEMINI_API_KEY is not set. Add it to your .env file, "
                     "or switch to LLM_PROVIDER=ollama to run without an API key."
                 )
+            genai, types = _import_gemini()
             self._gemini_client = genai.Client(
                 api_key=GEMINI_API_KEY,
                 http_options=types.HttpOptions(api_version="v1beta"),
@@ -92,6 +105,7 @@ class LLMProvider:
             if not GEMINI_API_KEY:
                 return "❌ GEMINI_API_KEY is not set — cannot switch to Gemini. Add it to your .env file."
             if self._gemini_client is None:
+                genai, types = _import_gemini()
                 self._gemini_client = genai.Client(
                     api_key=GEMINI_API_KEY,
                     http_options=types.HttpOptions(api_version="v1beta"),
@@ -148,6 +162,7 @@ class LLMProvider:
     # ── Gemini internals ───────────────────────────────────────────────────
 
     def _gemini_chat(self, messages: list[dict], system_prompt: str) -> str:
+        _, types = _import_gemini()
         contents = []
         for m in messages:
             role = "model" if m["role"] == "assistant" else "user"
@@ -164,6 +179,7 @@ class LLMProvider:
         return response.text
 
     def _gemini_embed(self, text: str) -> List[float]:
+        _import_gemini()
         if self._gemini_client is None:
             raise RuntimeError(
                 "Gemini client is not initialised. Set LLM_PROVIDER=gemini and add "
@@ -194,13 +210,34 @@ class LLMProvider:
         return r.json()["message"]["content"]
 
     def _ollama_embed(self, text: str) -> List[float]:
-        r = requests.post(
-            f"{OLLAMA_BASE_URL}/api/embeddings",
-            json={"model": OLLAMA_EMBED_MODEL, "prompt": text},
-            timeout=60,
+        # Ollama >= 0.3 uses POST /api/embed; older builds use /api/embeddings.
+        attempts = (
+            (f"{OLLAMA_BASE_URL}/api/embed", {"model": OLLAMA_EMBED_MODEL, "input": text}),
+            (
+                f"{OLLAMA_BASE_URL}/api/embeddings",
+                {"model": OLLAMA_EMBED_MODEL, "prompt": text},
+            ),
         )
-        r.raise_for_status()
-        return r.json()["embedding"]
+        last_err: Optional[Exception] = None
+        for url, payload in attempts:
+            try:
+                r = requests.post(url, json=payload, timeout=60)
+                if r.status_code == 404:
+                    continue
+                r.raise_for_status()
+                data = r.json()
+                if "embedding" in data:
+                    return data["embedding"]
+                embeddings = data.get("embeddings")
+                if embeddings:
+                    first = embeddings[0]
+                    return first if isinstance(first, list) else first["embedding"]
+            except Exception as e:
+                last_err = e
+        raise RuntimeError(
+            f"Ollama embedding failed for model {OLLAMA_EMBED_MODEL}. "
+            "Ensure Ollama is running and `ollama pull nomic-embed-text` has been run."
+        ) from last_err
 
     def ollama_tool_call(
         self,

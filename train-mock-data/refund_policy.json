@@ -354,5 +354,21 @@
     "rebooking_conditions": "Free rebooking under RF009 is subject to seat availability and applies only to equivalent routes, equivalent fare classes, and the same passenger.",
     "relationship_to_RF005": "RF009 covers refunds and rebooking for extreme weather or natural disasters. RF005 delay compensation does not apply to these events unless the delay is separately confirmed as operator fault.",
     "precedence": "RF009 takes precedence over RF006 when the same cancellation or suspension is caused by extreme weather or natural disaster. RF005 delay compensation does not apply to RF009 events unless customer service explicitly authorises an exception."
+  },
+  {
+    "policy_id": "RF010",
+    "label": "Metro Online Single-Ticket Purchase",
+    "applies_to": {
+      "network_type": "metro",
+      "ticket_types": ["single", "day_pass"]
+    },
+    "summary": "Registered users may purchase metro single tickets and day passes through the TransitFlow mobile app for same-day travel. Payment is taken at purchase via credit card, debit card, or e-wallet. A digital QR ticket is issued immediately. Metro single tickets follow RF003 for cancellation before first tap-in. Day passes follow RF004 before first use. This policy supplements booking_rules.json metro online_single_ticket settings.",
+    "rules": [
+      "Single tickets: priced using stops-based formula from metro_schedules.json (base_fare_usd + stops_travelled × per_stop_rate_usd).",
+      "Day passes: flat $5.00 for unlimited metro travel on the purchase date.",
+      "Tickets are valid only on the selected travel date; no advance purchase beyond the calendar day of travel."
+    ],
+    "related_policies": ["RF003", "RF004"],
+    "notes": "National rail online booking remains subject to national_rail rules in booking_rules.json."
   }
 ]

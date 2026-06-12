@@ -42,9 +42,19 @@ except Exception:
 
 
 def _session():
-    """Create a short-lived Neo4j session and fail fast if driver is unavailable."""
+    """Create a Neo4j session; verify connectivity and rebuild driver if stale."""
+    global _driver
     if not _driver:
         raise RuntimeError("Neo4j driver is not initialized.")
+    try:
+        _driver.verify_connectivity()
+    except Exception:
+        try:
+            _driver.close()
+        except Exception:
+            pass
+        _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+        _driver.verify_connectivity()
     return _driver.session()
 
 
@@ -162,10 +172,10 @@ def _find_shortest_path(
     origin_id: str,
     destination_id: str,
     network: str,
-    avoid_station_id: Optional[str] = None,
+    avoid_station_ids: Optional[set[str] | list[str]] = None,
 ) -> Optional[Path]:
     """
-    Get an unweighted shortest path with optional station exclusion.
+    Get an unweighted shortest path with optional station exclusions.
 
     This is the compatibility fallback when weighted procedures are unavailable
     or when callers explicitly prefer hop-based shortest-path semantics.
@@ -183,15 +193,18 @@ def _find_shortest_path(
         "origin_id": origin_id,
         "destination_id": destination_id,
     }
-    if avoid_station_id:
-        avoid_clause = "AND NONE(n IN nodes(p) WHERE n.station_id = $avoid_id)"
-        params["avoid_id"] = avoid_station_id
+    if avoid_station_ids:
+        avoid_list = sorted({s.upper() for s in avoid_station_ids})
+        avoid_clause = "AND NONE(n IN nodes(p) WHERE n.station_id IN $avoid_ids)"
+        params["avoid_ids"] = avoid_list
 
+    # Small transit graph — cap hops to keep shortestPath fast (avoids *..25 enumeration).
+    max_hops = 15 if net != "cross" else 20
     cypher = f"""
     MATCH (start:{start_label} {{station_id: $origin_id}}),
           (end:{end_label} {{station_id: $destination_id}})
     MATCH p = shortestPath(
-        (start)-[:{rels}*..25]-(end)
+        (start)-[:{rels}*..{max_hops}]-(end)
     )
     WHERE p IS NOT NULL {avoid_clause}
     RETURN p
@@ -258,7 +271,10 @@ def _find_weighted_path(
             pass
 
     path = _find_shortest_path(
-        origin_id, destination_id, network, avoid_station_id
+        origin_id,
+        destination_id,
+        network,
+        {avoid_station_id} if avoid_station_id else None,
     )
     if not path:
         return None
@@ -365,6 +381,7 @@ def query_cheapest_route(
     data["origin_id"] = origin_id
     data["destination_id"] = destination_id
     data["total_cost"] = data["total_fare_usd"]
+    data["total_cost_usd"] = data["total_fare_usd"]
     return data
 
 
@@ -378,6 +395,9 @@ def query_alternative_routes(
     """
     Find routes that avoid a closed or delayed station.
 
+    Uses repeated shortestPath (not full path enumeration) so queries finish
+    quickly on the small course graph.
+
     Returns:
         List of routes; each route is a list of leg dicts.
         The first leg includes `total_time_min` so consumers can quickly rank
@@ -389,36 +409,52 @@ def query_alternative_routes(
     origin_id = origin_id.upper()
     destination_id = destination_id.upper()
     avoid_station_id = avoid_station_id.upper()
+    max_routes = max(1, min(max_routes, 5))
 
-    net = _infer_network(origin_id, destination_id, network)
-    rels = _rel_pattern(net)
-    start_label = _node_label(origin_id)
-    end_label = _node_label(destination_id)
-
-    cypher = f"""
-    MATCH (start:{start_label} {{station_id: $origin_id}}),
-          (end:{end_label} {{station_id: $destination_id}})
-    MATCH p = (start)-[:{rels}*..25]-(end)
-    WHERE NONE(n IN nodes(p) WHERE n.station_id = $avoid_id)
-    WITH p,
-         reduce(t = 0, r IN relationships(p) | t + coalesce(r.time_weight, 0)) AS total_time
-    RETURN p, total_time
-    ORDER BY total_time ASC
-    LIMIT $max_routes
-    """
-
+    avoid: set[str] = {avoid_station_id}
     routes: list[list[dict]] = []
-    with _session() as session:
-        for record in session.run(
-            cypher,
-            origin_id=origin_id,
-            destination_id=destination_id,
-            avoid_id=avoid_station_id,
-            max_routes=max_routes,
-        ):
-            legs = _path_legs(record["p"])
-            legs[0]["total_time_min"] = record["total_time"] if legs else record["total_time"]
+    seen_signatures: set[tuple[str, ...]] = set()
+
+    for _ in range(max_routes):
+        path = _find_shortest_path(origin_id, destination_id, network, avoid)
+        if not path:
+            break
+        sig = tuple(n.get("station_id") for n in path.nodes)
+        if sig in seen_signatures:
+            break
+        seen_signatures.add(sig)
+        legs = _path_legs(path)
+        if legs:
+            legs[0]["total_time_min"] = _path_time(path)
+        routes.append(legs)
+        # Block intermediate nodes so the next iteration finds a different path.
+        for node in path.nodes[1:-1]:
+            sid = node.get("station_id")
+            if sid:
+                avoid.add(sid)
+
+    if routes or _infer_network(origin_id, destination_id, network) != "rail":
+        return routes
+
+    # Same-network rail search found nothing — try cross-network only when endpoints differ.
+    if network == "auto" and not _is_metro(origin_id) and not _is_metro(destination_id):
+        cross_avoid: set[str] = {avoid_station_id}
+        for _ in range(max_routes):
+            path = _find_shortest_path(origin_id, destination_id, "cross", cross_avoid)
+            if not path:
+                break
+            sig = tuple(n.get("station_id") for n in path.nodes)
+            if sig in seen_signatures:
+                break
+            seen_signatures.add(sig)
+            legs = _path_legs(path)
+            if legs:
+                legs[0]["total_time_min"] = _path_time(path)
             routes.append(legs)
+            for node in path.nodes[1:-1]:
+                sid = node.get("station_id")
+                if sid:
+                    cross_avoid.add(sid)
 
     return routes
 
@@ -482,33 +518,22 @@ def query_delay_ripple(delayed_station_id: str, hops: int = 2) -> list[dict]:
         return []
 
     delayed_station_id = delayed_station_id.upper()
+    hops = max(0, min(hops, 5))
 
     if hops == 0:
         label = _node_label(delayed_station_id)
-
         cypher = f"""
-        MATCH (s:{label} {{station_id: $station_id}})
+        MATCH (n:{label} {{station_id: $station_id}})
         RETURN
-            s.station_id AS station_id,
-            s.name AS name,
+            n.station_id AS station_id,
+            n.name AS name,
             0 AS hops_away,
-            coalesce(s.lines, [s.line]) AS lines_affected,
-            CASE
-                WHEN 'MetroStation' IN labels(s) THEN 'metro'
-                ELSE 'rail'
-            END AS network
+            coalesce(n.lines, [n.line]) AS lines_affected,
+            CASE WHEN 'MetroStation' IN labels(n) THEN 'metro' ELSE 'rail' END AS network
         """
-
         with _session() as session:
-            return [
-                dict(row)
-                for row in session.run(
-                    cypher,
-                    station_id=delayed_station_id
-                )
-            ]
-
-    hops = max(1, min(hops, 5))
+            row = session.run(cypher, station_id=delayed_station_id).single()
+            return [dict(row)] if row else []
 
     cypher = f"""
     MATCH (origin {{station_id: $station_id}})

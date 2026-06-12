@@ -1,17 +1,19 @@
 """
-TransitFlow — pgvector Policy Document Seeder
-Run once after starting Docker:
+TransitFlow — pgvector policy document seeder
+=============================================
+
+Run once after PostgreSQL is up and seeded::
+
     python skeleton/seed_vectors.py
 
-This script:
-  1. Loads policy chunks from train-mock-data/policy_chunks.json
-  2. Embeds each document using the configured LLM provider
-  3. Stores the text + vector in PostgreSQL (policy_documents table)
+Workflow:
+  1. Ensure ``policy_documents`` columns exist (``ensure_policy_schema``).
+  2. Load pre-chunked policies from ``train-mock-data/policy_chunks.json``.
+  3. Embed each chunk with the active LLM provider (Ollama or Gemini).
+  4. Upsert rows via ``store_policy_document`` (ON CONFLICT on ``chunk_id``).
 
-Note: Gemini free tier has ~1500 requests/minute — this script makes ~13 calls, well within limits.
-
-Students: To extend the assistant's knowledge, add entries to the JSON files in
-train-mock-data/ and re-run this script.
+Re-run after editing policy JSON or switching embedding models.
+Ollama default: ``nomic-embed-text`` (768 dimensions).
 """
 
 import json
@@ -21,6 +23,9 @@ import time
 
 sys.path.insert(0, ".")
 
+import psycopg2
+
+from skeleton.config import PG_DSN
 from skeleton.llm_provider import llm
 from databases.relational.queries import store_policy_document
 
@@ -42,7 +47,26 @@ def build_documents():
     return _load("policy_chunks.json")
 
 
+def ensure_policy_schema() -> None:
+    """Upgrade policy_documents on existing DBs without a full docker reset."""
+    alters = [
+        "ALTER TABLE policy_documents ADD COLUMN IF NOT EXISTS chunk_id VARCHAR(150)",
+        "ALTER TABLE policy_documents ADD COLUMN IF NOT EXISTS document_type VARCHAR(50)",
+        "ALTER TABLE policy_documents ADD COLUMN IF NOT EXISTS policy_id VARCHAR(100)",
+        "ALTER TABLE policy_documents ADD COLUMN IF NOT EXISTS metadata JSONB",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_policy_chunk_id ON policy_documents(chunk_id)",
+        "CREATE INDEX IF NOT EXISTS idx_policy_metadata ON policy_documents USING GIN (metadata)",
+    ]
+    with psycopg2.connect(PG_DSN) as conn:
+        with conn.cursor() as cur:
+            for stmt in alters:
+                cur.execute(stmt)
+        conn.commit()
+    print("✓ policy_documents schema ready\n")
+
+
 def seed():
+    ensure_policy_schema()
     documents = build_documents()
     print(f"📄 Embedding {len(documents)} policy documents using {llm.chat_provider}...\n")
 
@@ -62,7 +86,8 @@ def seed():
                 title=doc["title"],
                 category=doc.get("document_type", "policy"),
                 document_type=doc.get("document_type", "policy"),
-                policy_id=doc.get("policy_id"),
+                policy_id=doc.get("policy_id")
+                or (doc.get("metadata") or {}).get("policy_id"),
                 content=doc["content"],
                 metadata=doc.get("metadata", {}),
                 embedding=embedding,

@@ -7,6 +7,8 @@ TWO ROLES ARE SERVED HERE:
   1. Relational  → dual-network transit (metro + national rail),
                    availability, fares, bookings, seat selection
   2. Vector      → policy document similarity search (pgvector)
+
+TASK 6 EXTENSION: ``query_schedule_seat_occupancy`` — see ``TASK6.md``.
 """
 
 from __future__ import annotations
@@ -14,11 +16,12 @@ from __future__ import annotations
 import json
 import random
 import string
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 import psycopg2
 import psycopg2.extras
+from psycopg2 import errorcodes
 
 # argon2-cffi provides a production-grade Argon2id implementation.
 # Install with: pip install argon2-cffi
@@ -29,6 +32,7 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
 from skeleton.config import PG_DSN, VECTOR_TOP_K, VECTOR_SIMILARITY_THRESHOLD
+from skeleton.password_hash import hash_password, verify_password
 
 # Single shared PasswordHasher instance — reusing it avoids re-reading config
 # on every call.  argon2-cffi automatically generates a unique CSPRNG salt for
@@ -55,32 +59,15 @@ def _gen_payment_id() -> str:
     return f"PM-{suffix}"
 
 
-def _hash_password(plaintext: str) -> str:
-    """
-    Hash a plaintext string using Argon2id via argon2-cffi.
-
-    argon2-cffi embeds a unique random salt inside the returned PHC-format
-    string, so no separate salt storage is needed.  The returned string is
-    safe to store directly in user_credentials.password_hash.
-    """
-    return _ph.hash(plaintext)
+def _gen_metro_trip_id() -> str:
+    suffix = "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    return f"MT-{suffix}"
 
 
-def _verify_password(plaintext: str, stored_hash: str) -> bool:
-    """
-    Verify a plaintext string against a stored Argon2id hash.
-
-    Returns True on success, False if the password is wrong or the hash
-    is malformed.  VerifyMismatchError is caught so callers never see an
-    exception for an incorrect password — only for a genuine system error.
-    """
-    try:
-        return _ph.verify(stored_hash, plaintext)
-    except VerifyMismatchError:
-        return False
-    except Exception:
-        # Any other argon2 error (corrupted hash, wrong format, etc.)
-        return False
+def _day_of_week_enum(travel_date: str) -> str:
+    """Map ISO date to schema ``day_of_week`` enum label (mon–sun)."""
+    d = date.fromisoformat(travel_date)
+    return ("mon", "tue", "wed", "thu", "fri", "sat", "sun")[d.weekday()]
 
 
 # ── Example ───────────────────────────────────────────────────────────────────
@@ -94,6 +81,48 @@ def example_query() -> dict:
             return dict(cur.fetchone())
 
 
+# ── BOOKING SCHEMA MIGRATION (existing DBs without full docker reset) ─────────
+
+
+def ensure_booking_seat_schema() -> None:
+    """
+    Add ``seat_occupies_slot`` and partial unique index so cancelled seats can be rebooked.
+
+    Safe to call on every seed/booking; no-op when already applied.
+    """
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                ALTER TABLE bookings
+                ADD COLUMN IF NOT EXISTS seat_occupies_slot BOOLEAN NOT NULL DEFAULT TRUE
+                """
+            )
+            cur.execute(
+                """
+                ALTER TABLE bookings
+                DROP CONSTRAINT IF EXISTS bookings_schedule_id_travel_date_departure_time_coach_seat__key
+                """
+            )
+            cur.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_bookings_active_seat_unique
+                ON bookings (schedule_id, travel_date, departure_time, coach, seat_id)
+                WHERE seat_occupies_slot = TRUE
+                """
+            )
+            cur.execute(
+                """
+                UPDATE bookings b
+                SET seat_occupies_slot = FALSE
+                FROM journeys j
+                WHERE j.journey_id = b.booking_id
+                  AND j.status = 'cancelled'
+                  AND b.seat_occupies_slot = TRUE
+                """
+            )
+
+
 # ── NATIONAL RAIL AVAILABILITY ────────────────────────────────────────────────
 
 
@@ -105,8 +134,23 @@ def query_national_rail_availability(
     """
     Return national rail schedules that serve both origin and destination
     in the correct order, with seat occupancy for the requested travel date.
+
+
+    When ``travel_date`` is set, only schedules operating on that weekday
+    (``national_rail_schedule_operates_on``) are included.
     """
-    sql = """
+    day_filter = ""
+    if travel_date:
+        day_filter = """
+        JOIN national_rail_schedule_operates_on op
+            ON op.schedule_id = s.schedule_id
+            AND op.day_of_week = %s::day_of_week
+        """
+        params: list = [_day_of_week_enum(travel_date), origin_id, destination_id, travel_date]
+    else:
+        params = [origin_id, destination_id, "1900-01-01"]
+
+    sql = f"""
         SELECT
             s.schedule_id,
             s.line,
@@ -117,24 +161,18 @@ def query_national_rail_availability(
             s.first_train_time,
             s.last_train_time,
             s.frequency_min,
-            -- origin stop info
-            o_stop.stop_order                      AS origin_stop_order,
-            o_stop.travel_time_from_origin_min     AS origin_travel_time,
-            -- destination stop info
-            d_stop.stop_order                      AS destination_stop_order,
-            d_stop.travel_time_from_origin_min     AS destination_travel_time,
-            -- number of stops between origin and destination
+            o_stop.stop_order        AS origin_stop_order,
+            o_stop.travel_time_from_origin_min AS origin_travel_time,
+            d_stop.stop_order        AS destination_stop_order,
+            d_stop.travel_time_from_origin_min AS destination_travel_time,
             (d_stop.stop_order - o_stop.stop_order) AS stops_travelled,
-            -- total seats on this schedule (NULL for express schedules with no seat layout)
-            seat_counts.total_seats,
-            -- seats already booked (non-cancelled) on the requested travel date
-            COALESCE(booked.booked_seats, 0)       AS booked_seats,
-            -- available_seats = total - booked; NULL when no seat layout exists (express)
-            CASE
-                WHEN seat_counts.total_seats IS NULL THEN NULL
-                ELSE seat_counts.total_seats - COALESCE(booked.booked_seats, 0)
-            END AS available_seats
+            COALESCE(booked.booked_seats, 0) AS booked_seats,
+            GREATEST(
+                COALESCE(capacity.total_seats, 0) - COALESCE(booked.booked_seats, 0),
+                0
+            ) AS available_seats
         FROM national_rail_schedules s
+        {day_filter}
         JOIN national_rail_schedule_stops o_stop
             ON o_stop.schedule_id = s.schedule_id
             AND o_stop.station_id = %s
@@ -143,17 +181,13 @@ def query_national_rail_availability(
             ON d_stop.schedule_id = s.schedule_id
             AND d_stop.station_id = %s
             AND d_stop.is_stopping = TRUE
-        -- origin must appear before destination in stop sequence
         AND o_stop.stop_order < d_stop.stop_order
-        -- count total seats per schedule from the seat inventory tables
         LEFT JOIN (
-            SELECT sl.schedule_id, COUNT(se.seat_id) AS total_seats
+            SELECT sl.schedule_id, COUNT(*) AS total_seats
             FROM seat_layouts sl
-            JOIN coaches co ON co.layout_id = sl.layout_id
-            JOIN seats   se ON se.layout_id = co.layout_id AND se.coach = co.coach
+            JOIN seats s ON s.layout_id = sl.layout_id
             GROUP BY sl.schedule_id
-        ) seat_counts ON seat_counts.schedule_id = s.schedule_id
-        -- count non-cancelled bookings for the requested travel date
+        ) capacity ON capacity.schedule_id = s.schedule_id
         LEFT JOIN (
             SELECT b.schedule_id, COUNT(*) AS booked_seats
             FROM bookings b
@@ -164,10 +198,9 @@ def query_national_rail_availability(
         ) booked ON booked.schedule_id = s.schedule_id
         ORDER BY s.line, s.service_type, s.first_train_time
     """
-    date_param = travel_date or "1900-01-01"
     with _connect() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, (origin_id, destination_id, date_param))
+            cur.execute(sql, tuple(params))
             return [dict(row) for row in cur.fetchall()]
 
 
@@ -270,12 +303,11 @@ def query_available_seats(
         -- exclude seats already booked on this date
         AND NOT EXISTS (
             SELECT 1 FROM bookings b
-            JOIN journeys j ON j.journey_id = b.booking_id
-            WHERE b.schedule_id  = sl.schedule_id
-            AND   b.travel_date  = %s
-            AND   b.coach        = s.coach
-            AND   b.seat_id      = s.seat_id
-            AND   j.status      != 'cancelled'
+            WHERE b.schedule_id = sl.schedule_id
+            AND   b.travel_date = %s
+            AND   b.coach       = s.coach
+            AND   b.seat_id     = s.seat_id
+            AND   b.seat_occupies_slot = TRUE
         )
         ORDER BY s.coach, s.seat_row, s.seat_column
     """
@@ -326,7 +358,6 @@ def query_user_profile(user_email: str) -> Optional[dict]:
             -- year_of_birth is derived from date_of_birth so callers do not
             -- need to parse the full date when only the year is needed
             EXTRACT(YEAR FROM date_of_birth)::int    AS year_of_birth,
-            registered_at,
             is_active
         FROM users
         WHERE email = %s
@@ -355,6 +386,8 @@ def query_user_bookings(user_email: str) -> dict:
             j.amount_usd,
             j.status,
             b.schedule_id,
+            b.origin_station_id,
+            b.destination_station_id,
             s.line,
             s.service_type,
             o_st.name   AS origin_name,
@@ -373,7 +406,6 @@ def query_user_bookings(user_email: str) -> dict:
         JOIN national_rail_stations o_st ON o_st.station_id = b.origin_station_id
         JOIN national_rail_stations d_st ON d_st.station_id = b.destination_station_id
         WHERE j.user_id = %s
-        AND j.status != 'cancelled'
         ORDER BY b.travel_date DESC, b.booked_at DESC
     """
 
@@ -446,10 +478,37 @@ def execute_booking(
     ticket_type: str = "single",
 ) -> tuple[bool, dict | str]:
     """Create a national rail booking for a logged-in user."""
+    ensure_booking_seat_schema()
     conn = psycopg2.connect(PG_DSN)
     conn.autocommit = False
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # 0. Prevent duplicate bookings for the same user, route, and date
+            cur.execute(
+                """
+                SELECT b.booking_id FROM bookings b
+                JOIN journeys j ON j.journey_id = b.booking_id
+                WHERE j.user_id = %s AND j.status = 'confirmed'
+                AND b.schedule_id = %s AND b.travel_date = %s
+                AND b.origin_station_id = %s AND b.destination_station_id = %s
+                LIMIT 1
+                """,
+                (
+                    user_id,
+                    schedule_id,
+                    travel_date,
+                    origin_station_id,
+                    destination_station_id,
+                ),
+            )
+            existing = cur.fetchone()
+            if existing:
+                return (
+                    False,
+                    f"You already have booking {existing['booking_id']} on {travel_date} "
+                    f"for this route. Cancel it first or choose another date.",
+                )
+
             # 1. Verify the requested schedule exists
             cur.execute(
                 "SELECT schedule_id, service_type FROM national_rail_schedules WHERE schedule_id = %s",
@@ -533,13 +592,13 @@ def execute_booking(
 
             coach = seat["coach"]
 
-            # 6. Check the seat is not already booked (join journeys to exclude cancelled bookings)
+            # 6. Check the seat is not already booked (using the active seat slot flag)
             cur.execute(
                 """
                 SELECT 1 FROM bookings b
-                JOIN journeys j ON j.journey_id = b.booking_id
                 WHERE b.schedule_id = %s AND b.travel_date = %s
-                AND b.coach = %s AND b.seat_id = %s AND j.status != 'cancelled'
+                AND b.coach = %s AND b.seat_id = %s
+                AND b.seat_occupies_slot = TRUE
             """,
                 (schedule_id, travel_date, coach, seat_id),
             )
@@ -607,7 +666,6 @@ def execute_booking(
 
             return True, {
                 "booking_id": booking_id,
-                "user_id": user_id,
                 "payment_id": payment_id,
                 "schedule_id": schedule_id,
                 "origin_station_id": origin_station_id,
@@ -622,6 +680,16 @@ def execute_booking(
                 "booked_at": booked_at.isoformat(),
             }
 
+    except psycopg2.IntegrityError as e:
+        # Catches concurrent booking attempts where another user grabs the seat first
+        conn.rollback()
+        from psycopg2 import errorcodes
+        if e.pgcode == errorcodes.UNIQUE_VIOLATION:
+            return (
+                False,
+                f"Seat {seat_id} was just taken on {travel_date}. Please try another seat.",
+            )
+        return False, str(e)
     except Exception as e:
         conn.rollback()
         return False, str(e)
@@ -629,12 +697,209 @@ def execute_booking(
         conn.close()
 
 
+def execute_metro_booking(
+    user_id: str,
+    schedule_id: str,
+    origin_station_id: str,
+    destination_station_id: str,
+    travel_date: str,
+    ticket_type: str = "single",
+) -> tuple[bool, dict | str]:
+    """
+    Purchase a metro single ticket or day pass (app / online mock) for a logged-in user.
+
+    Uses ``query_metro_schedules`` + ``query_metro_fare``; no seat assignment per booking_rules.json.
+    """
+    conn = psycopg2.connect(PG_DSN)
+    conn.autocommit = False
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            if ticket_type not in ("single", "day_pass"):
+                return False, "Metro online booking supports single or day_pass only."
+
+            cur.execute(
+                """
+                SELECT 1 FROM metro_trips t
+                JOIN journeys j ON j.journey_id = t.trip_id
+                WHERE j.user_id = %s AND j.status = 'confirmed'
+                AND t.origin_station_id = %s AND t.destination_station_id = %s
+                AND t.travel_date = %s
+                LIMIT 1
+                """,
+                (user_id, origin_station_id, destination_station_id, travel_date),
+            )
+            if cur.fetchone():
+                return (
+                    False,
+                    "You already have a confirmed metro trip on this route and date.",
+                )
+
+            rows = query_metro_schedules(origin_station_id, destination_station_id)
+            row = next((r for r in rows if r["schedule_id"] == schedule_id), None)
+            if not row and rows:
+                row = rows[0]
+                schedule_id = row["schedule_id"]
+            if not row:
+                return False, f"No metro service {origin_station_id}→{destination_station_id}."
+
+            stops = int(row["stops_travelled"])
+            if ticket_type == "day_pass":
+                amount = 5.00
+            else:
+                fare = query_metro_fare(schedule_id, stops)
+                if not fare:
+                    return False, f"Could not calculate fare for {schedule_id}."
+                amount = float(fare["total_fare_usd"])
+
+            trip_id = _gen_metro_trip_id()
+            purchased_at = datetime.now(timezone.utc)
+            cur.execute(
+                """
+                INSERT INTO journeys (journey_id, network, user_id, ticket_type, amount_usd, status)
+                VALUES (%s, 'metro', %s, %s, %s, 'confirmed')
+                """,
+                (trip_id, user_id, ticket_type, amount),
+            )
+            cur.execute(
+                """
+                INSERT INTO metro_trips
+                    (trip_id, schedule_id, origin_station_id, destination_station_id,
+                     travel_date, day_pass_ref, stops_travelled, purchased_at, travelled_at)
+                VALUES (%s, %s, %s, %s, %s, NULL, %s, %s, NULL)
+                """,
+                (
+                    trip_id,
+                    schedule_id,
+                    origin_station_id,
+                    destination_station_id,
+                    travel_date,
+                    stops if ticket_type == "single" else None,
+                    purchased_at,
+                ),
+            )
+            payment_id = _gen_payment_id()
+            cur.execute(
+                """
+                INSERT INTO payments (payment_id, journey_id, amount_usd, method, status, paid_at)
+                VALUES (%s, %s, %s, 'ewallet', 'paid', %s)
+                """,
+                (payment_id, trip_id, amount, purchased_at),
+            )
+            conn.commit()
+            return True, {
+                "trip_id": trip_id,
+                "payment_id": payment_id,
+                "schedule_id": schedule_id,
+                "origin_station_id": origin_station_id,
+                "destination_station_id": destination_station_id,
+                "travel_date": travel_date,
+                "ticket_type": ticket_type,
+                "stops_travelled": stops,
+                "amount_usd": amount,
+                "status": "confirmed",
+            }
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        conn.close()
+
+def _execute_metro_cancellation(
+    journey_id: str, user_id: str
+) -> tuple[bool, dict | str]:
+    """
+    Execute cancellation for a metro journey based on the TransitFlow schema.
+    Updates the journeys status and marks the corresponding payment as refunded.
+    """
+    # 注意：請確保這裡的 PG_DSN 或是 _connect() 和你檔案上半部保持一致
+    conn = psycopg2.connect(PG_DSN)
+    conn.autocommit = False
+
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # 1. 檢查行程是否存在、是否屬於該使用者，以及目前的狀態
+            cur.execute(
+                """
+                SELECT status, amount_usd, ticket_type
+                FROM journeys 
+                WHERE journey_id = %s AND user_id = %s AND network = 'metro'
+                """,
+                (journey_id, user_id),
+            )
+            journey = cur.fetchone()
+
+            if not journey:
+                return (
+                    False,
+                    f"Metro journey {journey_id} not found or doesn't belong to you.",
+                )
+
+            if journey["status"] == "cancelled":
+                return False, "This metro journey is already cancelled."
+            if journey["status"] == "completed":
+                return False, "Cannot cancel a completed metro journey."
+
+            # 2. 處理退款政策 (RF003 / RF004)
+            # 捷運通常是全額退款，若有手續費可在此調整 admin_fee
+            amount = float(journey["amount_usd"])
+            admin_fee = 0.00
+            refund_amount = round(amount - admin_fee, 2)
+
+            policy_note = (
+                "RF003: Single ticket full refund"
+                if journey["ticket_type"] == "single"
+                else "RF004: Day pass full refund"
+            )
+
+            # 3. 更新 Supertype (journeys) 的狀態為 cancelled
+            cur.execute(
+                """
+                UPDATE journeys 
+                SET status = 'cancelled' 
+                WHERE journey_id = %s
+                """,
+                (journey_id,),
+            )
+
+            # 4. 更新 payments 表的狀態，把已付款的紀錄改為 refunded
+            cur.execute(
+                """
+                UPDATE payments 
+                SET status = 'refunded' 
+                WHERE journey_id = %s AND status = 'paid'
+                """,
+                (journey_id,),
+            )
+
+            conn.commit()
+
+            # 回傳與國鐵退票格式一致的 dict，讓前端好處理
+            return True, {
+                "booking_id": journey_id,  # 前端統一吃 booking_id 欄位
+                "original_amount_usd": amount,
+                "refund_amount": refund_amount,
+                "refund_amount_usd": refund_amount,
+                "admin_fee_usd": admin_fee,
+                "policy_note": policy_note,
+                "hours_until_departure": 0,  # 捷運不看班次時間，可以直接給 0
+            }
+
+    except Exception as e:
+        conn.rollback()
+        return False, f"Database error during metro cancellation: {str(e)}"
+    finally:
+        conn.close()
+
 def execute_cancellation(booking_id: str, user_id: str) -> tuple[bool, dict | str]:
     """
-    Cancel a national rail booking and calculate refund per policy.
-    Normal (RF001): 100% / 75% / 50% / 0%
-    Express (RF002): 100% / 50% / 0%
+    Cancel a national rail booking or metro trip and calculate refund per policy.
+    National rail: RF001 / RF002. Metro: RF003 (single) / RF004 (day_pass).
     """
+    journey_id = booking_id.upper()
+    if journey_id.startswith("MT"):
+        return _execute_metro_cancellation(journey_id, user_id)
+
+    ensure_booking_seat_schema()
     conn = psycopg2.connect(PG_DSN)
     conn.autocommit = False
     try:
@@ -738,6 +1003,15 @@ def execute_cancellation(booking_id: str, user_id: str) -> tuple[bool, dict | st
                 (booking_id,),
             )
 
+            # 4b. Release the seat slot so it can be re-booked on the same date
+            cur.execute(
+                """
+                UPDATE bookings SET seat_occupies_slot = FALSE
+                WHERE booking_id = %s
+                """,
+                (booking_id,),
+            )
+
             # 5. Mark the original payment as refunded (only if currently 'paid')
             cur.execute(
                 """
@@ -788,7 +1062,7 @@ def register_user(
             if cur.fetchone():
                 return False, f"Email {email} is already registered."
 
-            # Generate a sequential user_id (e.g. RU01, RU02...)
+            # Generate a sequential user_id securely (e.g. RU01, RU02...)
             cur.execute("""
                 SELECT COALESCE(
                     MAX(CAST(SUBSTRING(user_id FROM 3) AS INTEGER)),
@@ -800,33 +1074,31 @@ def register_user(
             max_user_num = cur.fetchone()[0]
             user_id = f"RU{max_user_num + 1:02d}"
 
-            # Insert the core user profile row
+            # Insert the core user profile row with date of birth
             registered_at = datetime.now(timezone.utc)
+            dob = date(year_of_birth, 1, 1)
             cur.execute(
                 """
                 INSERT INTO users
-                    (user_id, first_name, last_name, email, registered_at, is_active)
-                VALUES (%s, %s, %s, %s, %s, TRUE)
+                    (user_id, first_name, last_name, email, date_of_birth, registered_at, is_active)
+                VALUES (%s, %s, %s, %s, %s, %s, TRUE)
             """,
-                (user_id, first_name, surname, email, registered_at),
+                (user_id, first_name, surname, email, dob, registered_at),
             )
 
-            # Hash the password with Argon2id before storing.
-            # _hash_password() returns a self-contained PHC string that includes
-            # the algorithm, cost parameters, salt, and hash — no extra columns needed.
-            pw_hash = _hash_password(password)
+            # Hash the password and get both hash and salt
+            pw_hash, pw_salt = hash_password(password)
             cur.execute(
                 """
                 INSERT INTO user_credentials
-                    (user_id, password_hash, hash_algorithm)
-                VALUES (%s, %s, 'argon2id')
+                    (user_id, password_hash, password_salt, hash_algorithm)
+                VALUES (%s, %s, %s, 'argon2id')
             """,
-                (user_id, pw_hash),
+                (user_id, pw_hash, pw_salt),
             )
 
-            # Hash the secret answer the same way; store case-folded so verification
-            # is case-insensitive without storing the raw answer.
-            sq_hash = _hash_password(secret_answer.lower())
+            # Hash the secret answer and generate sequential security question ID
+            sq_hash, sq_salt = hash_password(secret_answer.lower())
             cur.execute("""
                 SELECT COALESCE(
                     MAX(CAST(SUBSTRING(security_question_id FROM 3) AS INTEGER)),
@@ -837,14 +1109,15 @@ def register_user(
             """)
             max_sq_num = cur.fetchone()[0]
             sq_id = f"SQ{max_sq_num + 1:03d}"
+
             cur.execute(
                 """
                 INSERT INTO user_security_questions
                     (security_question_id, user_id, secret_question,
-                     secret_answer_hash, hash_algorithm)
-                VALUES (%s, %s, %s, %s, 'argon2id')
+                     secret_answer_hash, secret_answer_salt, hash_algorithm)
+                VALUES (%s, %s, %s, %s, %s, 'argon2id')
             """,
-                (sq_id, user_id, secret_question, sq_hash),
+                (sq_id, user_id, secret_question, sq_hash, sq_salt),
             )
 
             conn.commit()
@@ -868,10 +1141,10 @@ def login_user(email: str, password: str) -> Optional[dict]:
             u.last_name   AS surname,
             u.phone,
             u.date_of_birth,
+            EXTRACT(YEAR FROM u.date_of_birth)::INTEGER AS year_of_birth,
             u.is_active,
-            uc.password_hash
-            -- password_salt is not selected: argon2-cffi embeds the salt
-            -- inside password_hash (PHC format) so no separate column is needed
+            uc.password_hash,
+            uc.password_salt
         FROM users u
         JOIN user_credentials uc ON uc.user_id = u.user_id
         WHERE u.email = %s
@@ -884,8 +1157,13 @@ def login_user(email: str, password: str) -> Optional[dict]:
                 return None
             if not row["is_active"]:
                 return None
-            if not _verify_password(password, row["password_hash"]):
+            
+            # Verify the password using both hash and explicit salt columns
+            if not verify_password(
+                password, row["password_hash"], bytes(row["password_salt"])
+            ):
                 return None
+                
             # Strip sensitive hash/salt fields before returning to the caller
             return {
                 "user_id": row["user_id"],
@@ -895,9 +1173,9 @@ def login_user(email: str, password: str) -> Optional[dict]:
                 "surname": row["surname"],
                 "phone": row["phone"],
                 "date_of_birth": row["date_of_birth"],
+                "year_of_birth": row["year_of_birth"],
                 "is_active": row["is_active"],
             }
-
 
 def get_user_secret_question(email: str) -> Optional[str]:
     """Return the secret question for a registered email, or None if not found."""
@@ -919,10 +1197,10 @@ def verify_secret_answer(email: str, answer: str) -> bool:
     """
     Return True if the provided answer matches the stored secret answer.
     Comparison is case-insensitive: the answer is lower-cased before
-    verifying against the stored Argon2id hash.
+    verifying against the stored Argon2id hash and salt.
     """
     sql = """
-        SELECT usq.secret_answer_hash
+        SELECT usq.secret_answer_hash, usq.secret_answer_salt
         FROM user_security_questions usq
         JOIN users u ON u.user_id = usq.user_id
         WHERE u.email = %s
@@ -934,14 +1212,14 @@ def verify_secret_answer(email: str, answer: str) -> bool:
             row = cur.fetchone()
             if not row:
                 return False
-            stored_hash = row[0]
+            stored_hash, stored_salt = row
             # Lower-case the candidate answer to match the case-folding applied at registration
-            return _verify_password(answer.lower(), stored_hash)
+            return verify_password(answer.lower(), stored_hash, bytes(stored_salt))
 
 
 def update_password(email: str, new_password: str) -> bool:
     """
-    Hash new_password with Argon2id and store it in user_credentials.
+    Hash new_password with Argon2id and store it along with its salt in user_credentials.
     Returns True if a row was updated, False if the email was not found.
     """
     conn = psycopg2.connect(PG_DSN)
@@ -953,16 +1231,18 @@ def update_password(email: str, new_password: str) -> bool:
             if not row:
                 return False
             user_id = row[0]
+            
             # Re-hash the new password with a fresh Argon2id salt
-            pw_hash = _hash_password(new_password)
+            pw_hash, pw_salt = hash_password(new_password)
             cur.execute(
                 """
                 UPDATE user_credentials
                 SET password_hash = %s,
+                    password_salt = %s,
                     updated_at    = now()
                 WHERE user_id = %s
             """,
-                (pw_hash, user_id),
+                (pw_hash, pw_salt, user_id),
             )
             conn.commit()
             return cur.rowcount > 0
@@ -982,9 +1262,14 @@ def query_policy_vector_search(
     """Find the most relevant policy documents for a given query embedding."""
     sql = """
         SELECT
+            chunk_id,
             title,
             category,
+            document_type,
+            policy_id,
             content,
+            metadata,
+            source_file,
             1 - (embedding <=> %s::vector) AS similarity
         FROM policy_documents
         WHERE 1 - (embedding <=> %s::vector) > %s
@@ -1000,23 +1285,68 @@ def query_policy_vector_search(
             return [dict(row) for row in cur.fetchall()]
 
 
+def query_schedule_seat_occupancy(
+    schedule_id: str, travel_date: str, fare_class: str = "standard"
+) -> dict:
+    """
+    Return booked vs available seat counts for a national rail schedule on a date.
+
+    Task 6 extension — useful for capacity / availability questions in the agent.
+
+    Algorithm (why two queries):
+    1. ``total_seats`` — COUNT seats joined through coaches/layouts for this schedule
+       and fare class (physical capacity from seed data).
+    2. ``available_seats`` — len of ``query_available_seats`` which excludes seats
+       with active ``bookings.seat_occupies_slot = TRUE`` on that date.
+    3. ``booked_seats`` — derived as total − available so the three numbers reconcile.
+    """
+    # Reuse existing seat-selection logic so occupancy matches booking rules.
+    seats = query_available_seats(schedule_id, travel_date, fare_class)
+    with _connect() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # Total capacity: all physical seats in coaches assigned to this fare class.
+            cur.execute(
+                """
+                SELECT COUNT(*) AS total_seats
+                FROM seats s
+                JOIN coaches c ON c.layout_id = s.layout_id AND c.coach = s.coach
+                JOIN seat_layouts sl ON sl.layout_id = s.layout_id
+                WHERE sl.schedule_id = %s AND c.fare_class = %s
+                """,
+                (schedule_id, fare_class),
+            )
+            row = cur.fetchone()
+    total = int(row["total_seats"]) if row else 0
+    available = len(seats)
+    booked = max(total - available, 0)
+    return {
+        "schedule_id": schedule_id,
+        "travel_date": travel_date,
+        "fare_class": fare_class,
+        "total_seats": total,
+        "booked_seats": booked,
+        "available_seats": available,
+    }
+
+
 def store_policy_document(
+    chunk_id: str,
     title: str,
     category: str,
+    document_type: str,
+    policy_id: str,
     content: str,
     embedding: list[float],
-    source_file: str = "",
-    chunk_id: str | None = None,
-    document_type: str | None = None,
-    policy_id: str | None = None,
     metadata: dict | None = None,
+    source_file: str = "",
 ) -> int:
-    """Insert or update a policy document with its embedding into the database."""
+    """Insert or update a policy document chunk with its embedding into the database."""
     sql = """
-        INSERT INTO policy_documents
-            (chunk_id, title, category, document_type, policy_id, content, metadata, embedding, source_file)
-        VALUES
-            (%s, %s, %s, %s, %s, %s, %s, %s::vector, %s)
+        INSERT INTO policy_documents (
+            chunk_id, title, category, document_type, policy_id,
+            content, metadata, embedding, source_file
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s::vector, %s)
         ON CONFLICT (chunk_id) DO UPDATE SET
             title = EXCLUDED.title,
             category = EXCLUDED.category,
@@ -1028,6 +1358,7 @@ def store_policy_document(
             source_file = EXCLUDED.source_file
         RETURNING id
     """
+    # Convert embedding float list to pgvector compatible string format
     vec_str = "[" + ",".join(str(x) for x in embedding) + "]"
 
     with _connect() as conn:
@@ -1041,7 +1372,7 @@ def store_policy_document(
                     document_type,
                     policy_id,
                     content,
-                    json.dumps(metadata or {}),
+                    json.dumps(metadata or {}),  # Safeguard against None values
                     vec_str,
                     source_file,
                 ),

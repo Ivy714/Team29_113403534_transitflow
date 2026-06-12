@@ -1,16 +1,23 @@
-# TransitFlow dependencies
-# Install with: pip install -r requirements.txt
+# TransitFlow Python dependencies
+# Install inside a virtual environment:
+#   python3 -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements.txt
 
 # Database drivers
 psycopg2-binary>=2.9.9       # PostgreSQL + pgvector
 neo4j>=5.18.0                # Neo4j graph database
 
-# LLM providers (install both; only one is used at runtime)
-google-genai>=1.0.0             # Gemini (new SDK, replaces google-generativeai)
-requests>=2.31.0             # Ollama (local)
+# LLM providers
+requests>=2.31.0             # Ollama HTTP API (default setup)
+# google-genai>=1.0.0        # Optional: only if LLM_PROVIDER=gemini in .env
 
-# Web UI
-gradio>=4.36.0
+# Web UI — pinned for Python 3.9 compatibility
+gradio==4.44.1
+gradio-client==1.3.0
+huggingface_hub>=0.23,<1.0   # Gradio 4.x breaks with huggingface_hub 1.x (HfFolder)
+pydantic>=2.0,<2.10          # Gradio 4.44 + pydantic 2.13 causes schema errors
+pydantic-core>=2.18,<2.24
 
 # Utilities
-python-dotenv>=1.0.0         # Load .env file
+python-dotenv>=1.0.0         # Load .env configuration
+argon2-cffi>=23.1.0          # Argon2id password hashing (course rubric)

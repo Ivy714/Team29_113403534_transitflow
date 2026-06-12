@@ -19,7 +19,6 @@ from psycopg2.extras import execute_values
 # Each _ph.hash() call generates a fresh CSPRNG salt automatically and embeds
 # it in the returned PHC-format string — no separate salt column required.
 from argon2 import PasswordHasher
-
 # ── resolve paths ─────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
@@ -27,6 +26,7 @@ DATA_DIR = os.path.join(PROJECT_DIR, "train-mock-data")
 
 sys.path.insert(0, PROJECT_DIR)
 from skeleton import config as cfg
+from skeleton.password_hash import hash_password
 
 _ph = PasswordHasher()
 
@@ -64,6 +64,19 @@ def insert_many(cur, table, columns, rows):
     return cur.rowcount
 
 
+def upsert_many(cur, table, columns, rows, conflict_target, update_columns):
+    """Bulk upsert — refreshes rows when re-seeding after schema/hash changes."""
+    if not rows:
+        return 0
+    sets = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_columns)
+    sql = (
+        f"INSERT INTO {table} ({', '.join(columns)}) VALUES %s "
+        f"ON CONFLICT ({conflict_target}) DO UPDATE SET {sets}"
+    )
+    execute_values(cur, sql, rows)
+    return cur.rowcount
+
+
 # ── layout lookup (built once, used in seed_national_rail_bookings) ───────────
 _LAYOUT_LOOKUP: dict[str, str] = {}  # schedule_id → layout_id
 
@@ -86,9 +99,7 @@ def seed_metro_stations(cur):
             s["name"],
             s["is_interchange_metro"],
             s["is_interchange_national_rail"],
-            s.get(
-                "interchange_national_rail_station_id"
-            ),  # nullable — None when is_interchange_national_rail is False
+            s.get("interchange_national_rail_station_id"),  # nullable
         )
         for s in data
     ]
@@ -120,9 +131,7 @@ def seed_national_rail_stations(cur):
             s["name"],
             s["is_interchange_national_rail"],
             s["is_interchange_metro"],
-            s.get(
-                "interchange_metro_station_id"
-            ),  # nullable — None when is_interchange_metro is False
+            s.get("interchange_metro_station_id"),  # nullable
         )
         for s in data
     ]
@@ -197,6 +206,7 @@ def seed_metro_schedules(cur):
         ["schedule_id", "station_id", "stop_order", "travel_time_from_origin_min"],
         stops,
     )
+
 
     # Expand the operates_on array into individual (schedule_id, day_of_week) rows
     operates = [(s["schedule_id"], day) for s in data for day in s["operates_on"]]
@@ -377,39 +387,37 @@ def seed_users(cur):
         users,
     )
 
-    # Hash each password with Argon2id.
-    # _hash() returns a self-contained PHC string; no salt column is populated.
+    # Hash each password with Argon2id (matches register_user / login_user).
     creds = []
     for u in data:
-        pw_hash = _hash(u["password"])
-        creds.append((u["user_id"], pw_hash, "argon2id"))
-    execute_values(
+        h, salt = hash_password(u["password"])
+        creds.append((u["user_id"], h, salt, "argon2id"))
+    
+    upsert_many(
         cur,
-        """
-        INSERT INTO user_credentials (user_id, password_hash, hash_algorithm)
-        VALUES %s
-        ON CONFLICT (user_id) DO UPDATE
-        SET password_hash = EXCLUDED.password_hash,
-            hash_algorithm = EXCLUDED.hash_algorithm,
-            updated_at = now()
-        """,
+        "user_credentials",
+        ["user_id", "password_hash", "password_salt", "hash_algorithm"],
         creds,
+        "user_id",
+        ["password_hash", "password_salt", "hash_algorithm"],
     )
 
-    # Hash the secret answer with Argon2id (lower-cased to enable case-insensitive verification)
+    # Hash the secret answer with Argon2id (lower-cased to enable case-insensitive verification).
     questions = []
     for i, u in enumerate(data, start=1):
-        sq_hash = _hash(u["secret_answer"].lower())
+        h, salt = hash_password(u["secret_answer"].lower())
         questions.append(
             (
                 f"SQ{i:03d}",
                 u["user_id"],
                 u["secret_question"],
-                sq_hash,
+                h,
+                salt,
                 "argon2id",
             )
         )
-    insert_many(
+    
+    upsert_many(
         cur,
         "user_security_questions",
         [
@@ -417,10 +425,19 @@ def seed_users(cur):
             "user_id",
             "secret_question",
             "secret_answer_hash",
+            "secret_answer_salt",
             "hash_algorithm",
         ],
         questions,
+        "security_question_id",
+        [
+            "secret_question",
+            "secret_answer_hash",
+            "secret_answer_salt",
+            "hash_algorithm",
+        ],
     )
+
     print(
         f"  ✓ users ({len(users)}) + user_credentials ({len(creds)}) + user_security_questions ({len(questions)})"
     )
@@ -455,7 +472,7 @@ def seed_national_rail_bookings(cur):
         journey_rows,
     )
 
-    # Insert booking rows as children of their corresponding journey rows
+# Insert booking rows as children of their corresponding journey rows
     bookings = []
     for b in data:
         layout_id = _LAYOUT_LOOKUP.get(b["schedule_id"])
@@ -510,7 +527,6 @@ def seed_national_rail_bookings(cur):
 def seed_metro_travels(cur):
     """
     metro_travel_history.json → journeys (network=metro) + metro_trips
-
     Day-pass add-on trips (e.g. MT021–MT024) require special handling:
       - purchased_at is null in JSON → fall back to travelled_at (column is NOT NULL)
       - day_pass_ref points to the parent day-pass journey_id (also MT* prefix)
@@ -639,6 +655,10 @@ def seed_feedback(cur):
 
 def main():
     print("Connecting to PostgreSQL...")
+    sys.path.insert(0, PROJECT_DIR)
+    from databases.relational.queries import ensure_booking_seat_schema
+
+    ensure_booking_seat_schema()
     conn = connect()
     conn.autocommit = False
     cur = conn.cursor()

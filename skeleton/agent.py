@@ -1,65 +1,62 @@
 """
-TransitFlow Agent — Full Production Version
-=============================================
-Integrates:
-  - Neo4j graph DB  (routing, interchange, alternative routes)
-  - PostgreSQL       (national rail availability, seats, bookings, user profile)
-  - pgvector RAG     (policy document search via embeddings)
+TransitFlow conversational agent
+==============================
+
+Rule-based router that answers passenger questions by calling:
+
+- **PostgreSQL** — schedules, fares, bookings, payments, policy RAG (pgvector)
+- **Neo4j** — shortest/cheapest routes, alternatives, interchange, ripple, connections
+- **train-mock-data JSON** — station name lookup and policy fallbacks when RAG is unavailable
+- **LLM (Ollama/Gemini)** — only when no structured handler matches
+
+Design goals (course README):
+- National rail availability respects travel direction (origin stop before destination).
+- Logged-in users can book/cancel national rail and metro via PostgreSQL booking functions.
+- Policy questions prefer vector search over ``policy_chunks.json`` embeddings.
+
+TASK 6 EXTENSION: seat occupancy handler — see ``TASK6.md``.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import Any, Optional
 
 from databases.graph import queries as graph
-from databases.relational.queries import (
-    execute_booking,
-    execute_cancellation,
-    query_available_seats,
-    query_metro_schedules,
-    query_national_rail_availability,
-    query_national_rail_fare,
-    query_policy_vector_search,
-    query_user_bookings,
-    query_user_profile,
-    auto_select_adjacent_seats,
-)
+from databases.relational import queries as pg
+from databases.relational.queries import auto_select_adjacent_seats
 from skeleton.config import DATA_DIR
+from skeleton.agent_tools import TOOLS, execute_tool
 from skeleton.llm_provider import llm
+from skeleton.policy_lookup import search_policy_json
 
-# ── Station index (built from JSON for name→ID mapping) ──────────────────────
-
-_MOCK: dict[str, Any] = {}
+# Lazy-built map: lowercase station name or id -> canonical station_id (MS## / NR##)
 _STATION_INDEX: dict[str, str] = {}
 
 
-def _load_mock() -> None:
+def _load_station_index() -> None:
+    """Build ``_STATION_INDEX`` once from metro and national rail station JSON files."""
     global _STATION_INDEX
-    if _MOCK:
+    if _STATION_INDEX:
         return
-    files = {
-        "metro_stations": "metro_stations.json",
-        "nr_stations": "national_rail_stations.json",
-        "refund_policy": "refund_policy.json",
-        "travel_policies": "travel_policies.json",
-        "booking_rules": "booking_rules.json",
-        "ticket_types": "ticket_types.json",
-    }
-    for key, fname in files.items():
+    for fname in ("metro_stations.json", "national_rail_stations.json"):
         path = DATA_DIR / fname
-        if path.exists():
-            _MOCK[key] = json.loads(path.read_text(encoding="utf-8"))
-
-    for s in _MOCK.get("metro_stations", []) + _MOCK.get("nr_stations", []):
-        _STATION_INDEX[s["name"].strip().lower()] = s["station_id"]
-        _STATION_INDEX[s["station_id"].lower()] = s["station_id"]
+        if not path.exists():
+            continue
+        for s in json.loads(path.read_text(encoding="utf-8")):
+            _STATION_INDEX[s["name"].strip().lower()] = s["station_id"]
+            _STATION_INDEX[s["station_id"].lower()] = s["station_id"]
 
 
 def _inject_station_ids(text: str) -> str:
-    _load_mock()
+    """
+    Replace station names in free text with ``Name (ID)`` hints for the LLM and regex parsers.
+
+    Example: ``Central Square`` -> ``Central Square (MS01)`` when not already annotated.
+    """
+    _load_station_index()
     result = text
     for name in sorted(_STATION_INDEX, key=len, reverse=True):
         if len(name) <= 3 and not name.startswith(("ms", "nr")):
@@ -76,17 +73,29 @@ def _inject_station_ids(text: str) -> str:
 
 
 def _extract_station_ids(text: str) -> list[str]:
+    """Return unique station IDs in order of first appearance (MS## / NR##)."""
     seen: set[str] = set()
-    out: list[str] = []
+    ordered: list[str] = []
     for m in re.findall(r"\b(MS\d{2}|NR\d{2})\b", text, re.I):
-        u = m.upper()
-        if u not in seen:
-            seen.add(u)
-            out.append(u)
-    return out
+        sid = m.upper()
+        if sid not in seen:
+            seen.add(sid)
+            ordered.append(sid)
+    return ordered
+
+
+def _extract_schedule_id(text: str) -> Optional[str]:
+    """Extract a national rail schedule id such as ``NR_SCH01`` from the message."""
+    m = re.search(r"\b(NR_SCH\d+)\b", text, re.I)
+    return m.group(1).upper() if m else None
 
 
 def _parse_route_endpoints(text: str, ids: list[str]) -> tuple[str, str]:
+    """
+    Resolve origin/destination from explicit FROM/TO phrasing or the first two IDs.
+
+    Falls back to ``(ids[0], ids[0])`` when only one id is present.
+    """
     m = re.search(
         r"(?:FROM|from)\s+(MS\d{2}|NR\d{2}).*?(?:TO|to)\s+(MS\d{2}|NR\d{2})",
         text,
@@ -99,330 +108,547 @@ def _parse_route_endpoints(text: str, ids: list[str]) -> tuple[str, str]:
     return ids[0], ids[0]
 
 
-def _child_passenger(text: str) -> bool:
-    return any(
-        k in text.lower() for k in ("child", "children", "5-15", "5–15", "兒童", "小孩")
-    )
-
-
-def _delay_minutes(text: str) -> Optional[int]:
-    m = re.search(r"(\d+)\s*(?:minutes?|mins?|分鐘)", text, re.I)
-    return int(m.group(1)) if m else None
-
-
-def _extract_date(text: str) -> Optional[str]:
-    m = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", text)
-    return m.group(1) if m else None
+def _extract_travel_date(text: str) -> str:
+    """Parse YYYY-MM-DD, YYYY/MM/DD, or YYYY.MM.DD."""
+    m = re.search(r"\b(20\d{2})[-./](\d{2})[-./](\d{2})\b", text)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+    return "2026-06-01"  # default date for booking queries
 
 
 def _extract_booking_id(text: str) -> Optional[str]:
-    m = re.search(r"\b(BK-[A-Z0-9]{6})\b", text, re.I)
+    """Parse journey ids: ``BK-XXXX``, ``BK001``, ``MT-XXXX``, or ``MT009``."""
+    m = re.search(r"\b(BK-[A-Z0-9]+|BK\d{3,}|MT-[A-Z0-9]+|MT\d{3,})\b", text, re.I)
     return m.group(1).upper() if m else None
 
 
-# ── Format helpers ────────────────────────────────────────────────────────────
+def _extract_avoid_station(text: str, origin: str, dest: str, ids: list[str]) -> Optional[str]:
+    """
+    Identify which station the user wants to avoid (closed / blocked).
+
+    Prefers explicit patterns like ``station (NR03) is closed`` so name injection
+    (e.g. Old Town -> MS07) does not override the parenthesised id.
+    """
+    m = re.search(
+        r"station\s*\((MS\d{2}|NR\d{2})\)\s+is\s+(?:closed|shut|封閉|關閉)",
+        text,
+        re.I,
+    )
+    if m:
+        return m.group(1).upper()
+    m = re.search(
+        r"\b(MS\d{2}|NR\d{2})\b[^.]{0,60}?\b(?:is\s+)?(?:closed|shut|封閉|關閉)",
+        text,
+        re.I,
+    )
+    if m:
+        sid = m.group(1).upper()
+        if sid not in (origin, dest):
+            return sid
+    m = re.search(
+        r"(?:closed|shut|封閉|關閉)[^.]{0,60}?\b(MS\d{2}|NR\d{2})\b",
+        text,
+        re.I,
+    )
+    if m:
+        return m.group(1).upper()
+    for sid in ids:
+        if sid not in (origin, dest):
+            return sid
+    return None
+
+
+def _policy_query_text(msg: str, lower: str) -> str:
+    """Rewrite the user message into a richer embedding query for pgvector RAG."""
+    if any(k in lower for k in ("bicycle", "bike", "腳踏車", "自行車")):
+        if any(k in lower for k in ("national", "rail", "國鐵", "train")):
+            return "national rail bicycle foldable standard peak hour policy"
+        if "metro" in lower or "捷運" in msg:
+            return "metro bicycle foldable standard not permitted policy"
+    if any(k in lower for k in ("pet", "dog", "cat", "寵物", "狗", "貓")):
+        net = "national rail" if any(k in lower for k in ("rail", "國鐵", "train")) else "metro"
+        return f"{net} pet animal carrier policy"
+    return msg
+
+
+def _policy_search(query: str) -> list[dict]:
+    """pgvector RAG first, then JSON keyword match fallback."""
+    try:
+        emb = llm.embed(query)
+        docs = pg.query_policy_vector_search(emb)
+        if docs:
+            return docs
+    except Exception:
+        pass
+
+    json_hit = search_policy_json(query)
+    if json_hit:
+        return [
+            {
+                "title": "Policy (train-mock-data JSON)",
+                "content": json_hit,
+                "similarity": 1.0,
+            }
+        ]
+    return []
+
+
+def _format_policy_docs(docs: list[dict], limit: int = 900) -> str:
+    """Format the top policy hit for chat display."""
+    if not docs:
+        return ""
+    lines = [f"【{docs[0]['title']}】", docs[0]["content"][:limit]]
+    if docs[0].get("similarity") is not None:
+        lines.append(f"\n(similarity {float(docs[0]['similarity']):.2f})")
+    return "\n".join(lines)
+
+
+def _rf005_rule_for_delay(minutes: int) -> Optional[dict]:
+    """Return the RF005 compensation rule that applies to ``minutes`` (from JSON)."""
+    if minutes < 30:
+        return None
+    for p in json.loads((DATA_DIR / "refund_policy.json").read_text(encoding="utf-8")):
+        if p.get("policy_id") != "RF005":
+            continue
+        for rule in p.get("compensation_rules", []):
+            rid = rule.get("rule_id", "")
+            if minutes >= 120 and rid == "RF005_R3":
+                return rule
+            if 60 <= minutes < 120 and rid == "RF005_R2":
+                return rule
+            if 30 <= minutes < 60 and rid == "RF005_R1":
+                return rule
+    return None
+
+
+def _format_refund_delay(minutes: int) -> str:
+    """Deterministic RF005 delay compensation from ``refund_policy.json`` (matches mock data)."""
+    rule = _rf005_rule_for_delay(minutes)
+    if not rule:
+        if minutes < 30:
+            return (
+                "【RF005】Delays under 30 minutes are not eligible for delay compensation "
+                "under operator-fault rules."
+            )
+        return "See RF005 for delay compensation; RF009 for natural disaster disruption."
+    claim = rule.get("how_to_claim", "Submit via app or customer service within 28 days.")
+    return (
+        f"【RF005 — {rule['rule_id']}】\n"
+        f"  Condition: {rule['condition']}\n"
+        f"  Compensation: {rule['compensation']}\n"
+        f"  How to claim: {claim}"
+    )
 
 
 def _format_route(data: dict, *, cost_mode: bool = False, child: bool = False) -> str:
+    """Pretty-print a graph route result (time or fare)."""
     if not data.get("found"):
-        return "No route found between those stations."
+        return "No route found."
     fare = float(data.get("total_fare_usd", data.get("total_cost", 0)))
     if child:
         fare = round(fare * 0.5, 2)
-        note = " (child half-price)"
+        note = " (child half fare)"
     else:
         note = ""
-    lines = ["**Route**"]
+    lines = ["【Route】"]
     if data.get("path"):
         lines.append("  → " + " → ".join(s["name"] for s in data["path"]))
     if data.get("interchange_points"):
         pts = ", ".join(s["name"] for s in data["interchange_points"])
         lines.append(f"  Interchange at: {pts}")
     if cost_mode:
-        lines.append(f"  Estimated fare: ${fare:.2f} USD{note}")
+        lines.append(f"  Fare approx. ${fare:.2f} USD{note}")
     else:
-        lines.append(f"  Estimated time: {data.get('total_time_min', '?')} min")
+        lines.append(f"  Time approx. {data.get('total_time_min', '?')} min{note}")
     return "\n".join(lines)
 
 
-def _format_nr_schedules(
-    rows: list[dict], origin: str, dest: str, child: bool = False
-) -> str:
-    if not rows:
-        return f"No national rail services found from {origin} to {dest}."
-    lines = [f"**National Rail: {origin} → {dest}**"]
-    for r in rows[:6]:
-        stops = r.get("stops_travelled", "?")
-        fare_info = query_national_rail_fare(r["schedule_id"], "standard", stops)
-        fare_val = fare_info["total_fare_usd"] if fare_info else "?"
-        if child and fare_info:
-            fare_val = round(float(fare_info["total_fare_usd"]) * 0.5, 2)
-        first = str(r.get("first_train_time", ""))[:5]
-        last = str(r.get("last_train_time", ""))[:5]
-        freq = r.get("frequency_min", "?")
-        stype = r.get("service_type", "")
-        line = r.get("line", "")
-        booked = r.get("booked_seats", 0)
-        lines.append(
-            f"  • **{r['schedule_id']}** {line} ({stype}) | "
-            f"First: {first}  Last: {last}  Every: {freq} min | "
-            f"Std fare: ${fare_val} | Booked seats today: {booked}"
-        )
-    return "\n".join(lines)
-
-
-def _format_metro_schedules(rows: list[dict], origin: str, dest: str) -> str:
-    if not rows:
-        return f"No metro services found from {origin} to {dest}."
-    lines = [f"**Metro: {origin} → {dest}**"]
-    for r in rows[:4]:
-        stops = r.get("stops_travelled", "?")
-        base = float(r.get("base_fare_usd", 0))
-        per = float(r.get("per_stop_rate_usd", 0))
-        fare = round(base + per * (stops if isinstance(stops, int) else 0), 2)
-        first = str(r.get("first_train_time", ""))[:5]
-        last = str(r.get("last_train_time", ""))[:5]
-        lines.append(
-            f"  • **{r['schedule_id']}** Line {r.get('line', '?')} | "
-            f"First: {first}  Last: {last} | "
-            f"Stops: {stops} | Fare: ${fare}"
-        )
-    return "\n".join(lines)
-
-
-def _format_bookings(data: dict, email: str) -> str:
-    lines = [f"**Bookings for {email}**"]
-    nr = data.get("national_rail", [])
-    metro = data.get("metro", [])
-    if not nr and not metro:
-        lines.append("  No bookings found.")
-        return "\n".join(lines)
-    for b in nr[:5]:
-        lines.append(
-            f"  🚂 {b['booking_id']}: {b.get('origin_name', b.get('origin_station_id'))} → "
-            f"{b.get('destination_name', b.get('destination_station_id'))} | "
-            f"{b['travel_date']} | {b['status']} | ${b['amount_usd']}"
-        )
-    for t in metro[:5]:
-        lines.append(
-            f"  🚇 {t['trip_id']}: {t.get('origin_name', t.get('origin_station_id'))} → "
-            f"{t.get('destination_name', t.get('destination_station_id'))} | "
-            f"{t['travel_date']} | {t['status']} | ${t['amount_usd']}"
-        )
-    return "\n".join(lines)
-
-
-# ── Policy / RAG ──────────────────────────────────────────────────────────────
-
-
-def _policy_reply(msg: str) -> Optional[str]:
-    """Use pgvector RAG to answer policy questions."""
-    lower = msg.lower()
-    policy_keywords = (
-        "policy",
-        "refund",
-        "cancel",
-        "compensation",
-        "delay",
-        "delayed",
-        "bicycle",
-        "bike",
-        "luggage",
-        "baggage",
-        "pet",
-        "규정",
-        "退款",
-        "補償",
-        "行李",
-        "攜帶",
-        "delayed",
-        "entitled",
+def _format_booking_result(ok: bool, res: Any) -> str:
+    """Format ``execute_booking`` success/failure for the chat UI."""
+    if not ok:
+        return f"Booking failed: {res}"
+    return (
+        f"【Booking confirmed】\n"
+        f"  booking_id: {res.get('booking_id')}\n"
+        f"  schedule: {res.get('schedule_id')}\n"
+        f"  route: {res.get('origin_station_id')} → {res.get('destination_station_id')}\n"
+        f"  date: {res.get('travel_date')}\n"
+        f"  class: {res.get('fare_class')}\n"
+        f"  seat: {res.get('coach')}{res.get('seat_id')}\n"
+        f"  amount: ${res.get('amount_usd')} USD\n"
+        f"  status: {res.get('status')}"
     )
-    if not any(k in lower for k in policy_keywords):
+
+
+def _format_metro_booking_result(ok: bool, res: Any) -> str:
+    """Format ``execute_metro_booking`` success/failure."""
+    if not ok:
+        return f"Metro booking failed: {res}"
+    return (
+        f"【Metro ticket confirmed】\n"
+        f"  trip_id: {res.get('trip_id')}\n"
+        f"  schedule: {res.get('schedule_id')}\n"
+        f"  route: {res.get('origin_station_id')} → {res.get('destination_station_id')}\n"
+        f"  date: {res.get('travel_date')}\n"
+        f"  type: {res.get('ticket_type')}\n"
+        f"  amount: ${res.get('amount_usd')} USD\n"
+        f"  status: {res.get('status')}"
+    )
+
+
+def _format_cancel_result(ok: bool, res: Any) -> str:
+    """Format ``execute_cancellation`` success/failure for the chat UI."""
+    if not ok:
+        return f"Cancellation failed: {res}"
+    return (
+        f"【Cancellation complete】\n"
+        f"  booking_id: {res.get('booking_id')}\n"
+        f"  original: ${res.get('original_amount_usd')} USD\n"
+        f"  refund: ${res.get('refund_amount_usd')} USD\n"
+        f"  admin fee: ${res.get('admin_fee_usd')} USD\n"
+        f"  policy: {res.get('policy_note')}"
+    )
+
+
+def _format_seat_occupancy(occ: dict) -> str:
+    """Format Task 4 ``query_schedule_seat_occupancy`` result."""
+    return (
+        f"【Seat occupancy — {occ['schedule_id']} on {occ['travel_date']} "
+        f"({occ['fare_class']})】\n"
+        f"  total seats: {occ['total_seats']}\n"
+        f"  booked: {occ['booked_seats']}\n"
+        f"  available: {occ['available_seats']}"
+    )
+
+
+def _handle_booking_cancel(msg: str, augmented: str, email: Optional[str]) -> Optional[str]:
+    """
+    Authenticated write path: national rail booking and cancellation.
+
+    Returns None when the message is not a book/cancel intent.
+    """
+    if not email:
+        if any(k in msg.lower() for k in ("book", "訂票", "cancel", "取消")):
+            return "Please log in (Login button, top right) before booking or cancelling."
         return None
 
-    try:
-        embedding = llm.embed(msg)
-        docs = query_policy_vector_search(embedding)
-        if not docs:
-            return None
-        lines = [f"**Policy: {docs[0]['title']}**"]
-        lines.append(docs[0]["content"][:800])
-        if len(docs) > 1:
-            lines.append(
-                f"\n_Also relevant: {', '.join(d['title'] for d in docs[1:])}_"
+    profile = pg.query_user_profile(email)
+    if not profile:
+        return "User profile not found. Please log in again."
+
+    lower = msg.lower()
+    uid = profile["user_id"]
+
+    # --- Cancellation (exclude generic "cancellation policy" questions) ---
+    if any(k in lower for k in ("cancel", "取消")) and not any(
+        k in lower for k in ("policy", "政策")
+    ):
+        bid = _extract_booking_id(augmented)
+        if not bid:
+            return "Please provide a booking/trip id, e.g. Cancel booking BK-XXXX or MT-XXXX"
+        ok, res = pg.execute_cancellation(bid, uid)
+        return _format_cancel_result(ok, res)
+
+    # --- New national rail booking ---
+    not_viewing = not any(
+        k in lower for k in ("my booking", "show my", "booking history", "我的訂單")
+    )
+    wants_book = not_viewing and (
+        any(
+            k in lower
+            for k in ("book me", "make a booking", "book a ticket", "訂票", "幫我訂", "buy a ticket")
+        )
+        or re.search(r"\bbook\b", lower)
+    )
+
+    if wants_book:
+        ids = _extract_station_ids(augmented)
+        if len(ids) < 2:
+            return "Booking requires origin and destination, e.g. Book NR01 to NR05 on 2026-06-01"
+
+        origin, dest = _parse_route_endpoints(augmented, ids)
+        travel_date = _extract_travel_date(augmented)
+
+        # --- Metro online booking (MS stations) ---
+        if origin.startswith("MS") and dest.startswith("MS"):
+            ticket_type = "day_pass" if "day pass" in lower or "day_pass" in lower else "single"
+            rows = pg.query_metro_schedules(origin, dest)
+            if not rows:
+                return f"No metro service {origin}→{dest}."
+            schedule_id = rows[0]["schedule_id"]
+            m = re.search(r"\b(MS_SCH\d+)\b", augmented, re.I)
+            if m:
+                schedule_id = m.group(1).upper()
+            ok, res = pg.execute_metro_booking(
+                user_id=uid,
+                schedule_id=schedule_id,
+                origin_station_id=origin,
+                destination_station_id=dest,
+                travel_date=travel_date,
+                ticket_type=ticket_type,
             )
-        return "\n".join(lines)
-    except Exception:
-        # pgvector not available — fall back to LLM
-        return None
+            return _format_metro_booking_result(ok, res)
+
+        if not (origin.startswith("NR") and dest.startswith("NR")):
+            return "Online booking supports national rail (NR) or metro (MS) station pairs."
+
+        fare_class = "first" if "first" in lower else "standard"
+
+        # --- National rail online booking (NR stations) ---
+        req_sched = _extract_schedule_id(augmented)
+        spec_seat_m = re.search(r"\b([A-Z]\d{2})\b", augmented, re.I)
+        req_seat = spec_seat_m.group(1).upper() if spec_seat_m else None
+
+        avail = pg.query_national_rail_availability(origin, dest, travel_date)
+        if not avail:
+            return f"No national rail service {origin}→{dest} on {travel_date}."
+
+        last_error = ""
+        for row in avail:
+            schedule_id = row["schedule_id"]
+
+            # ---If the user has specified a train, skip the other trains that don't match---
+            if req_sched and schedule_id != req_sched:
+                continue
+
+            seats = pg.query_available_seats(schedule_id, travel_date, fare_class)
+            if not seats:
+                continue
+
+            seat_ids = [s["seat_id"] for s in seats]
+
+            # ---Reserved Seating vs Automatic Seat Selection---
+            if req_seat:
+                if req_seat in seat_ids:
+                    seat_ids = [req_seat] 
+                else:
+                    last_error = f"Seat {req_seat} is already occupied or invalid."
+                    continue  
+            elif "any" in lower or "auto" in lower:
+                seat_ids = auto_select_adjacent_seats(seats, 1) or seat_ids
+
+            for seat_id in seat_ids:
+                ok, res = pg.execute_booking(
+                    user_id=uid,
+                    schedule_id=schedule_id,
+                    origin_station_id=origin,
+                    destination_station_id=dest,
+                    travel_date=travel_date,
+                    fare_class=fare_class,
+                    seat_id=seat_id,
+                    ticket_type="return" if "return" in lower else "single",
+                )
+                if ok:
+                    return _format_booking_result(ok, res)
+                last_error = str(res)
+                if "already have booking" in last_error.lower():
+                    return f"Booking failed: {last_error}"
+                if "already booked" in last_error.lower() or "just taken" in last_error.lower():
+                    continue
+
+        if last_error:
+            return f"Booking failed: {last_error}"
+        return f"No {fare_class} seats left for {origin}→{dest} on {travel_date}."
+
+    return None
 
 
-# ── Booking flow ──────────────────────────────────────────────────────────────
+def _handle_data_query(msg: str, augmented: str, email: Optional[str]) -> Optional[str]:
+    """
+    Read-only handlers: bookings, policies, schedules, routes, payments, seat occupancy.
 
-
-def _handle_booking(msg: str, augmented: str, email: Optional[str]) -> Optional[str]:
-    """Multi-step: find schedules → pick seat → execute booking."""
-    if not email:
-        return "Please log in to make a booking."
-
-    lower = msg.lower()
-    ids = _extract_station_ids(augmented)
-    travel_date = _extract_date(msg)
-    child = _child_passenger(msg)
-    fare_class = (
-        "first"
-        if any(k in lower for k in ("first class", "first-class", "頭等"))
-        else "standard"
-    )
-
-    if len(ids) < 2:
-        return "Please specify origin and destination station IDs (e.g. NR01, NR05)."
-
-    origin, dest = _parse_route_endpoints(augmented, ids)
-    if not origin.startswith("NR") or not dest.startswith("NR"):
-        return "Booking is currently available for national rail only."
-
-    if not travel_date:
-        return f"Please specify a travel date (e.g. {date.today().isoformat()})."
-
-    # 1. Find available schedules
-    schedules = query_national_rail_availability(origin, dest, travel_date)
-    if not schedules:
-        return f"No national rail services from {origin} to {dest} on {travel_date}."
-
-    schedule = schedules[0]
-    sid = schedule["schedule_id"]
-    stops = schedule["stops_travelled"]
-
-    fare_info = query_national_rail_fare(sid, fare_class, stops)
-    fare_usd = float(fare_info["total_fare_usd"]) if fare_info else 0
-    if child:
-        fare_usd = round(fare_usd * 0.5, 2)
-
-    # 2. Get available seats
-    available = query_available_seats(sid, travel_date, fare_class)
-    if not available:
-        return f"No {fare_class} seats available on {sid} for {travel_date}."
-
-    selected = auto_select_adjacent_seats(available, 1)
-    if not selected:
-        return "Could not auto-select a seat."
-    seat_id = selected[0]
-
-    # 3. Get user_id
-    profile = query_user_profile(email)
-    if not profile:
-        return "User profile not found."
-    user_id = profile["user_id"]
-
-    # 4. Execute booking
-    ok, result = execute_booking(
-        user_id=user_id,
-        schedule_id=sid,
-        origin_station_id=origin,
-        destination_station_id=dest,
-        travel_date=travel_date,
-        fare_class=fare_class,
-        seat_id=seat_id,
-    )
-    if not ok:
-        return f"Booking failed: {result}"
-
-    lines = ["**Booking Confirmed ✅**"]
-    lines.append(f"  Booking ID: **{result['booking_id']}**")
-    lines.append(f"  Route: {origin} → {dest}")
-    lines.append(f"  Date: {travel_date} | Class: {fare_class} | Seat: {seat_id}")
-    lines.append(f"  Amount: ${fare_usd:.2f} USD")
-    lines.append(f"  Payment ID: {result['payment_id']}")
-    return "\n".join(lines)
-
-
-def _handle_cancellation(msg: str, email: Optional[str]) -> Optional[str]:
-    if not email:
-        return "Please log in to cancel a booking."
-    booking_id = _extract_booking_id(msg)
-    if not booking_id:
-        return "Please provide a booking ID (e.g. BK-ABC123)."
-
-    profile = query_user_profile(email)
-    if not profile:
-        return "User profile not found."
-
-    ok, result = execute_cancellation(booking_id, profile["user_id"])
-    if not ok:
-        return f"Cancellation failed: {result}"
-
-    lines = ["**Booking Cancelled ✅**"]
-    lines.append(f"  Booking: {booking_id}")
-    lines.append(f"  Original amount: ${result['original_amount_usd']:.2f}")
-    lines.append(
-        f"  Refund: ${result['refund_amount_usd']:.2f} (admin fee: ${result['admin_fee_usd']:.2f})"
-    )
-    lines.append(f"  Policy: {result['policy_note']}")
-    lines.append(f"  Hours until departure: {result['hours_until_departure']}")
-    return "\n".join(lines)
-
-
-# ── Main data query dispatcher ────────────────────────────────────────────────
-
-
-def _handle_data_query(
-    msg: str, augmented: str, email: Optional[str]
-) -> Optional[tuple[str, str]]:
-    """Returns (reply, debug_label) or None."""
+    Returns None when no rule matches (caller may fall back to LLM).
+    """
     lower = msg.lower()
     ids = _extract_station_ids(augmented)
 
-    # Bookings history
+    # --- User profile (PostgreSQL) ---
+    if any(k in lower for k in ("profile", "user info", "用戶資料")):
+        email_match = re.search(r"[\w.-]+@[\w.-]+", msg)
+        target_email = email_match.group(0) if email_match else email
+        if target_email:
+            prof = pg.query_user_profile(target_email)
+            if not prof:
+                return f"User {target_email} not found."
+            return (
+                f"【User Profile】\n"
+                f"  User ID: {prof.get('user_id')}\n"
+                f"  Name: {prof.get('first_name')} {prof.get('surname')}\n"
+                f"  Born: {prof.get('year_of_birth')}\n"
+                f"  Email: {prof.get('email')}"
+            )
+        return "Please specify a user email to look up."
+
+    # --- User booking history (PostgreSQL) ---
     if email and any(
         k in lower
+        for k in ("my booking", "my bookings", "show my", "booking history", "我的訂", "訂單")
+    ):
+        data = pg.query_user_bookings(email)
+        lines = [f"【Bookings for {email}】"]
+        for b in data["national_rail"][:6]:
+            lines.append(
+                f"  NR {b['booking_id']}: {b.get('origin_name', b.get('origin_station_id'))}"
+                f"→{b.get('destination_name', b.get('destination_station_id'))} "
+                f"{b['travel_date']} {b['status']} ${b['amount_usd']}"
+            )
+        for t in data["metro"][:6]:
+            lines.append(
+                f"  Metro {t['trip_id']}: {t.get('origin_name')}→{t.get('destination_name')} "
+                f"{t['travel_date']} {t['status']} ${t['amount_usd']}"
+            )
+        if not data["national_rail"] and not data["metro"]:
+            lines.append("  (no records)")
+        return "\n".join(lines)
+
+    # --- Task 4: seat occupancy for a specific schedule + date ---
+    sched = _extract_schedule_id(augmented)
+    if sched and any(
+        k in lower
         for k in (
-            "my booking",
-            "my bookings",
-            "show my",
-            "show booking",
-            "booking history",
-            "my trips",
-            "我的訂",
-            "訂票紀錄",
-            "訂單",
+            "seat", "seats", "occupancy", "available", "remaining", "capacity",
+            "空位", "座位", "剩餘",
         )
     ):
-        data = query_user_bookings(email)
-        return _format_bookings(data, email), "db=postgres:query_user_bookings"
+        travel_date = _extract_travel_date(augmented)
+        fare_class = "first" if "first" in lower else "standard"
+        occ = pg.query_schedule_seat_occupancy(sched, travel_date, fare_class)
+        return _format_seat_occupancy(occ)
 
-    # Cancellation
-    if any(
-        k in lower for k in ("cancel booking", "cancel my booking", "取消訂", "取消")
-    ):
-        reply = _handle_cancellation(msg, email)
-        return reply, "db=postgres:execute_cancellation"
+    # --- Delay compensation (RAG first, then JSON RF005) ---
+    delay = None
+    m = re.search(r"(\d+)\s*(?:minutes?|mins?|分鐘)", msg, re.I)
+    if m:
+        delay = int(m.group(1))
+    if delay is not None and any(k in lower for k in ("delay", "compensation", "延誤", "補償")):
+        # Prefer JSON tier lookup when minutes are explicit (RAG can mis-rank similar chunks).
+        answer = _format_refund_delay(delay)
+        if _rf005_rule_for_delay(delay):
+            return answer
+        rag = _policy_search(f"delay compensation {delay} minutes refund policy")
+        if rag:
+            return _format_policy_docs(rag)
+        return answer
 
-    # Booking
-    if any(k in lower for k in ("book me", "make a booking", "book a", "幫我訂")):
-        reply = _handle_booking(msg, augmented, email)
-        return reply, "db=postgres:execute_booking"
+    # --- Payment status for a booking id ---
+    bid = _extract_booking_id(augmented)
+    if bid and any(k in lower for k in ("payment", "paid", "refund status", "付款", "支付")):
+        pay = pg.query_payment_info(bid)
+        if pay:
+            return (
+                f"【Payment — {bid}】\n"
+                f"  payment_id: {pay.get('payment_id')}\n"
+                f"  amount: ${pay.get('amount_usd')} USD\n"
+                f"  method: {pay.get('method')}\n"
+                f"  status: {pay.get('status')}\n"
+                f"  paid_at: {pay.get('paid_at')}"
+            )
+        return f"No payment record for {bid}."
+
+    # --- Luggage policy (RAG + JSON fallback) ---
+    if any(k in lower for k in ("luggage", "行李", "baggage")):
+        docs = _policy_search(
+            "metro luggage policy" if "metro" in lower or "捷運" in msg else "national rail luggage"
+        )
+        if docs:
+            return _format_policy_docs(docs, 800)
+        tp = json.loads((DATA_DIR / "travel_policies.json").read_text(encoding="utf-8"))
+        net = "national_rail" if any(k in lower for k in ("rail", "國鐵", "train")) else "metro"
+        lug = tp.get(net, {}).get("luggage", {})
+        return (
+            f"【Luggage — {net}】\n"
+            f"  items per passenger: {lug.get('items_per_passenger', '?')}\n"
+            f"  {lug.get('max_dimensions_per_item_cm', lug.get('notes', ''))}"
+        )
+
+    # --- General policy / refund / bicycle / pets ---
+    policy_kw = (
+        "policy", "refund", "政策", "退款", "bicycle", "bike", "寵物", "pet",
+        "compensation", "補償",
+    )
+    if any(k in lower for k in policy_kw):
+        docs = _policy_search(_policy_query_text(msg, lower))
+        if docs:
+            return _format_policy_docs(docs)
+        if any(k in lower for k in ("bicycle", "bike", "腳踏車", "自行車")):
+            tp = json.loads((DATA_DIR / "travel_policies.json").read_text(encoding="utf-8"))
+            net = "national_rail" if any(k in lower for k in ("national", "rail", "國鐵", "train")) else "metro"
+            bikes = tp.get(net, {}).get("bicycles", {})
+            fold = bikes.get("foldable_bicycles", {})
+            std = bikes.get("standard_bicycles", {})
+            lines = [f"【Bicycle policy — {net}】"]
+            if fold:
+                lines.append(
+                    f"  Foldable: {'yes' if fold.get('permitted') else 'no'} — "
+                    f"{fold.get('conditions', fold.get('notes', ''))}"
+                )
+            if std:
+                lines.append(
+                    f"  Standard: {'yes' if std.get('permitted') else 'no'} — "
+                    f"{std.get('conditions') or std.get('reason', '')}"
+                )
+            return "\n".join(lines)
 
     if len(ids) >= 2:
         origin, dest = _parse_route_endpoints(augmented, ids)
-        child = _child_passenger(msg)
+        child = any(k in lower for k in ("child", "兒童", "小孩"))
 
-        # Alternative routes (closed station)
-        if any(
-            k in lower for k in ("closed", "alternative", "avoid", "if", "封閉", "避開")
+        # --- Timetable / availability (direction-correct for national rail) ---
+        schedule_kw = (
+            "trains run from", "train from", "trains from", "trains run",
+            "train", "schedule", "班次", "timetable", "服務", "departures",
+        )
+        if any(k in lower for k in schedule_kw) and not any(
+            k in lower for k in ("route", "fastest", "shortest", "怎麼去", "how do i get")
         ):
-            avoid = next((x for x in ids if x not in (origin, dest)), None)
-            if avoid:
-                routes = graph.query_alternative_routes(origin, dest, avoid)
-                if not routes:
-                    return (
-                        f"No alternative routes from {origin} to {dest} avoiding {avoid}.",
-                        "db=neo4j:query_alternative_routes",
+            if origin.startswith("NR"):
+                rows = pg.query_national_rail_availability(origin, dest)
+                if not rows:
+                    return f"No national rail {origin}→{dest}."
+                lines = [f"【National rail {origin}→{dest}】"]
+                for r in rows[:4]:
+                    fare = pg.query_national_rail_fare(
+                        r["schedule_id"], "standard", r.get("stops_travelled", 1)
                     )
-                lines = [
-                    f"**Alternative routes ({origin} → {dest}, avoiding {avoid})**"
-                ]
+                    t = r.get("first_train_time", "")
+                    if hasattr(t, "strftime"):
+                        t = t.strftime("%H:%M")
+                    lines.append(
+                        f"  • {r['schedule_id']} {r.get('line')} {r.get('service_type')} "
+                        f"departs {t} standard ${fare['total_fare_usd'] if fare else '?'}"
+                    )
+                return "\n".join(lines)
+            rows = pg.query_metro_schedules(origin, dest)
+            lines = [f"【Metro {origin}→{dest}】"]
+            for r in rows[:4]:
+                fare = pg.query_metro_fare(r["schedule_id"], r.get("stops_travelled", 1))
+                extra = f" ${fare['total_fare_usd']}" if fare else ""
+                lines.append(f"  • {r['schedule_id']} line {r.get('line')}{extra}")
+            return "\n".join(lines) if rows else f"No metro {origin}→{dest}."
+
+        # --- Avoid closed station (Neo4j alternative routes) ---
+        closed = any(k in lower for k in ("closed", "封閉", "關閉", "avoid", "避開"))
+        if closed:
+            avoid = _extract_avoid_station(augmented, origin, dest, ids)
+            if avoid:
+                network = "rail" if origin.startswith("NR") and dest.startswith("NR") else "auto"
+                routes = graph.query_alternative_routes(origin, dest, avoid, network=network)
+                if not routes and network == "rail":
+                    routes = graph.query_alternative_routes(
+                        origin, dest, avoid, network="auto"
+                    )
+                if not routes:
+                    guidance = search_policy_json(
+                        f"station {avoid} closed alternative routes"
+                    ) or ""
+                    base = (
+                        f"No alternative route {origin}→{dest} avoiding {avoid}. "
+                        f"The NR1 corridor has no rail bypass of {avoid} in the network map."
+                    )
+                    if guidance:
+                        return f"{base}\n\n{guidance}"
+                    return base
+                lines = [f"【Routes avoiding {avoid}】"]
                 for i, legs in enumerate(routes, 1):
                     stops = [legs[0]["from_station_id"]] + [
                         lg["to_station_id"] for lg in legs
@@ -431,125 +657,78 @@ def _handle_data_query(
                     lines.append(f"  {i}. {' → '.join(stops)} (~{t} min)")
                 return "\n".join(lines), "db=neo4j:query_alternative_routes"
 
-        # National rail schedule query
-        if origin.startswith("NR") and any(
-            k in lower
-            for k in (
-                "train",
-                "trains",
-                "schedule",
-                "service",
-                "run",
-                "班次",
-                "時刻",
-            )
+        # --- Cross-network "how do I get" (explicit interchange path) ---
+        cross = (origin.startswith("MS") and dest.startswith("NR")) or (
+            origin.startswith("NR") and dest.startswith("MS")
+        )
+        if cross and any(
+            k in lower for k in ("how do i get", "how to get", "get from", "怎麼去", "怎麼走")
         ):
-            travel_date = _extract_date(msg)
-            rows = query_national_rail_availability(origin, dest, travel_date)
-            return _format_nr_schedules(
-                rows, origin, dest, child
-            ), "db=postgres:query_national_rail_availability"
-
-        # Cross-network routing (must come before same-network branches)
-        origin_is_metro = origin.startswith("MS")
-        dest_is_metro = dest.startswith("MS")
-        if origin_is_metro != dest_is_metro:
             data = graph.query_interchange_path(origin, dest)
-            return _format_route(data, child=child), "db=neo4j:query_interchange_path"
+            if data.get("found"):
+                return _format_route(data, cost_mode=False, child=child)
 
-        # Fastest / shortest route — Neo4j, not schedule lookup
-        if any(
-            k in lower
-            for k in (
-                "fastest",
-                "quickest",
-                "shortest",
-                "route",
-                "get from",
-                "how do i get",
-                "how to get",
-                "最快",
-            )
-        ):
-            data = graph.query_shortest_route(origin, dest)
-            return _format_route(data, child=child), "db=neo4j:query_shortest_route"
-
-        # Fare / cheapest — Neo4j
-        if any(
-            k in lower
-            for k in (
-                "fare",
-                "price",
-                "cost",
-                "cheap",
-                "cheapest",
-                "多少錢",
-                "便宜",
-                "票價",
-            )
-        ):
-            data = graph.query_cheapest_route(origin, dest)
-            return _format_route(
-                data, cost_mode=True, child=child
-            ), "db=neo4j:query_cheapest_route"
-
-        # Metro schedule lookup (only when explicitly asking about timetables)
-        if (
-            origin.startswith("MS")
-            and dest.startswith("MS")
-            and any(
-                k in lower
-                for k in (
-                    "schedule",
-                    "timetable",
-                    "first train",
-                    "last train",
-                    "班次",
-                    "時刻",
-                )
-            )
-        ):
-            rows = query_metro_schedules(origin, dest)
-            return _format_metro_schedules(
-                rows, origin, dest
-            ), "db=postgres:query_metro_schedules"
-
-        # Default: shortest route via Neo4j
-        data = graph.query_shortest_route(origin, dest)
-        return _format_route(data, child=child), "db=neo4j:query_shortest_route"
-
-    # Single station: ripple / connections
-    if len(ids) == 1:
-        if any(
-            k in lower for k in ("ripple", "affected", "disruption", "漣漪", "波及")
-        ):
+        # --- Delay ripple from a station (Neo4j) ---
+        if any(k in lower for k in ("ripple", "漣漪", "波及")):
             affected = graph.query_delay_ripple(ids[0], hops=2)
-            lines = [f"**Ripple effect from {ids[0]}**"]
+            lines = [f"【Delay ripple from {ids[0]}】"]
             for a in affected[:10]:
-                lines.append(
-                    f"  • {a.get('name')} ({a['station_id']}) — {a.get('hops_away')} hop(s)"
-                )
-            return (
-                "\n".join(lines)
-                if affected
-                else f"No nearby stations affected by {ids[0]}."
-            ), "db=neo4j:query_delay_ripple"
+                lines.append(f"  • {a.get('name')} ({a.get('station_id')})")
+            return "\n".join(lines) if affected else f"No ripple neighbours for {ids[0]}."
 
-        if any(k in lower for k in ("connection", "connect", "neighbour", "鄰站")):
-            conns = graph.query_station_connections(ids[0])
-            lines = [f"**Connections from {ids[0]}**"]
-            for c in conns[:8]:
-                lines.append(
-                    f"  • {c['name']} ({c['station_id']}) via {c['relationship']} ({c.get('travel_time_min', '?')} min)"
-                )
-            return (
-                "\n".join(lines) if conns else f"No connection data for {ids[0]}."
-            ), "db=neo4j:query_station_connections"
+        # --- Shortest or cheapest route (Neo4j) ---
+        want_cost = any(k in lower for k in ("cheap", "cheapest", "便宜", "fare", "票價", "多少錢"))
+        data = (
+            graph.query_cheapest_route(origin, dest)
+            if want_cost
+            else graph.query_shortest_route(origin, dest)
+        )
+        return _format_route(data, cost_mode=want_cost, child=child)
+
+    # --- Single-station connections (Neo4j) ---
+    if len(ids) == 1 and any(k in lower for k in ("connection", "鄰站", "連接")):
+        conns = graph.query_station_connections(ids[0])
+        lines = [f"【Connections from {ids[0]}】"]
+        for c in conns[:8]:
+            lines.append(
+                f"  • {c.get('name')} ({c.get('station_id')}) "
+                f"{c.get('relationship')} {c.get('travel_time_min', '')} min"
+            )
+        return "\n".join(lines) if conns else f"No connections for {ids[0]}."
 
     return None
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+def _try_llm_tool_calls(augmented: str, email: Optional[str]) -> Optional[str]:
+    """README Advanced: LLM picks a tool; we execute it against DB/JSON (grounded)."""
+    if not llm.ollama_available():
+        return None
+    try:
+        calls = llm.ollama_tool_call(
+            [],
+            TOOLS,
+            augmented,
+            system_prompt=(
+                "Pick at most one TransitFlow tool to answer the user. "
+                "Use exact station ids from the message."
+            ),
+        )
+    except Exception:
+        return None
+    if not calls:
+        return None
+
+    parts: list[str] = []
+    for call in calls[:2]:
+        name = call.get("name", "")
+        params = call.get("params") or {}
+        if isinstance(params, str):
+            try:
+                params = json.loads(params)
+            except json.JSONDecodeError:
+                params = {}
+        parts.append(execute_tool(name, params, user_email=email))
+    return "\n\n".join(parts) if parts else None
 
 
 def run_agent(
@@ -559,84 +738,56 @@ def run_agent(
     current_user_email: Optional[str] = None,
 ) -> tuple:
     """
-    Execute one conversational turn.
+    Execute one chat turn.
 
-    Priority order:
-      1. Auth-guarded write operations (booking, cancellation) via PostgreSQL
-      2. Policy / RAG via pgvector
-      3. Structured data queries (schedules, routes, seats) via PostgreSQL + Neo4j
-      4. LLM fallback
+    Args:
+        user_message: Raw user text from the UI.
+        history: Prior LLM messages ``[{"role": "user"|"assistant", "content": ...}, ...]``.
+        debug: When True, return a third element describing which handler ran.
+        current_user_email: Logged-in user email, or None for guest.
 
-    Always returns (answer, new_history) or (answer, new_history, debug_text)
-    depending on the debug flag.
+    Returns:
+        ``(reply, updated_history)`` or ``(reply, updated_history, debug_info)``.
     """
     msg = user_message.strip()
     lower = msg.lower()
     augmented = _inject_station_ids(msg)
-    ids = _extract_station_ids(augmented)
-    debug_lines: list[str] = [f"user: {msg[:80]}"]
 
-    def _ret(reply: str, label: str):
-        debug_lines.append(label)
-        new_h = history + [
-            {"role": "user", "content": msg},
-            {"role": "assistant", "content": reply},
-        ]
+    for handler_name, handler in (
+        ("booking_cancel", lambda: _handle_booking_cancel(msg, augmented, current_user_email)),
+        ("data", lambda: _handle_data_query(msg, augmented, current_user_email)),
+    ):
+        reply = handler()
+        if reply:
+            new_h = history + [{"role": "user", "content": msg}, {"role": "assistant", "content": reply}]
+            if debug:
+                return reply, new_h, f"intent={handler_name}"
+            return reply, new_h
+
+    tool_answer = _try_llm_tool_calls(augmented, current_user_email)
+    if tool_answer:
+        new_h = history + [{"role": "user", "content": msg}, {"role": "assistant", "content": tool_answer}]
         if debug:
-            return reply, new_h, "\n".join(debug_lines)
-        return reply, new_h
+            return tool_answer, new_h, "fallback=llm_tools"
+        return tool_answer, new_h
 
-    # 1. Write operations — require login
-    if current_user_email:
-        # Cancellation
-        if any(k in lower for k in ("cancel booking", "cancel my booking", "取消")):
-            bk_match = re.search(r"BK-[A-Z0-9]+", msg, re.I)
-            if bk_match:
-                profile = query_user_profile(current_user_email)
-                if not profile:
-                    return _ret(
-                        "User profile not found.", "db=postgres:query_user_profile:miss"
-                    )
-                ok, result = execute_cancellation(
-                    bk_match.group(0).upper(), profile["user_id"]
-                )
-                if not ok:
-                    return _ret(
-                        f"Cancellation failed: {result}",
-                        "db=postgres:execute_cancellation:fail",
-                    )
-                lines = ["**Booking Cancelled ✅**"]
-                lines.append(f"  Booking: {bk_match.group(0).upper()}")
-                lines.append(
-                    f"  Refund: ${result['refund_amount_usd']:.2f}  (admin fee: ${result['admin_fee_usd']:.2f})"
-                )
-                lines.append(f"  Policy: {result['policy_note']}")
-                return _ret("\n".join(lines), "db=postgres:execute_cancellation:ok")
-
-        # Booking
-        if any(k in lower for k in ("book me", "make a booking", "book a", "幫我訂")):
-            reply = _handle_booking(msg, augmented, current_user_email)
-            return _ret(reply, "db=postgres:execute_booking")
-
-    # 2. Policy / RAG (pgvector)
-    policy = _policy_reply(msg)
-    if policy:
-        return _ret(policy, "intent=policy_rag")
-
-    # 3. Structured data queries
-    result = _handle_data_query(msg, augmented, current_user_email)
-    if result:
-        reply, label = result
-        return _ret(reply, f"intent=data | {label}")
-
-    # 4. LLM fallback
     system = (
-        f"You are the TransitFlow rail assistant. Today is {date.today().isoformat()}. "
-        f"Logged-in user: {current_user_email or 'guest'}. "
-        "Help with transit queries, schedules, fares, policies, and bookings."
+        f"You are TransitFlow assistant. Today is {date.today().isoformat()}. "
+        f"User: {current_user_email or 'guest'}. "
+        "Answer only from TransitFlow data shown to you. "
+        "If you lack database results, say you cannot confirm and suggest a specific query. "
+        "Never invent schedules, fares, or policy rules."
     )
+
     answer = llm.chat(
         messages=history + [{"role": "user", "content": augmented}],
         system_prompt=system,
     )
-    return _ret(answer, "intent=llm_fallback")
+
+    new_h = history + [
+        {"role": "user", "content": msg},
+        {"role": "assistant", "content": answer},
+    ]
+    if debug:
+        return answer, new_h, "intent=llm_fallback"
+    return answer, new_h
