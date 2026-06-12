@@ -2886,7 +2886,7 @@ The following screenshots were captured from the Task 6 UI.
 
 **Expected:** A dataframe showing the logged-in user's National Rail and/or Metro journeys. The tab shows a structured journey-history table for `alice.tan@email.com`.
 
-![Task 6 — My Bookings tab after login](https://cdn.phototourl.com/free/2026-06-12-6aa3af64-7f48-4028-be80-4f2cd208b239.png)
+![Task 6 — My Bookings tab after login](docs/screenshots/task6_my_bookings.png)
 
 #### Screenshot 2 — Seat Capacity tab
 
@@ -2894,7 +2894,7 @@ The following screenshots were captured from the Task 6 UI.
 
 **Expected:** A Markdown block showing total / booked / available seats from a direct database lookup.
 
-![Task 6 — Seat Capacity lookup for NR_SCH01](https://cdn.phototourl.com/free/2026-06-12-0d4a26e2-397e-4669-8fcf-dde95378c9b3.png)
+![Task 6 — Seat Capacity lookup for NR_SCH01](docs/screenshots/task6_seat_capacity.png)
 
 #### Screenshot 3 — Agent seat-capacity query
 
@@ -2902,7 +2902,7 @@ The following screenshots were captured from the Task 6 UI.
 
 **Expected:** The agent returns a formatted seat-occupancy answer showing total seats, booked seats, and available seats.
 
-![Task 6 — Agent seat-capacity query](https://cdn.phototourl.com/free/2026-06-12-b7450d20-d95f-4c4d-af1e-9cfc4aaaf6fc.jpg)
+![Task 6 — Chat seat occupancy response](docs/screenshots/task6_chat_seats.png)
 
 ---
 
