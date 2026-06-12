@@ -71,7 +71,7 @@ CREATE TABLE users (
     is_active      BOOLEAN      NOT NULL DEFAULT TRUE
 );
 
--- 密碼獨立存放，BYTEA salt
+-- Passwords are stored separately, BYTEA salt
 CREATE TABLE user_credentials (
     user_id         VARCHAR(10) PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
     password_hash   TEXT        NOT NULL,
@@ -82,7 +82,7 @@ CREATE TABLE user_credentials (
     CHECK (hash_algorithm = 'argon2id')
 );
 
--- 安全問題獨立存放
+-- Security issues should be stored separately
 CREATE TABLE user_security_questions (
     security_question_id  VARCHAR(10) PRIMARY KEY,
     user_id               VARCHAR(10) NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
@@ -114,7 +114,7 @@ CREATE TABLE national_rail_stations (
     interchange_metro_station_id       VARCHAR(10)
 );
 
--- 互相參照，用 INITIALLY DEFERRED
+-- Refer to each other, using INITIALLY DEFERRED
 ALTER TABLE metro_stations
     ADD CONSTRAINT fk_metro_interchange_nr
     FOREIGN KEY (interchange_national_rail_station_id)
@@ -191,7 +191,7 @@ CREATE TABLE national_rail_schedules (
     CHECK (origin_station_id <> destination_station_id)
 );
 
--- 票價獨立成 table
+-- Ticket prices are listed separately
 CREATE TABLE national_rail_schedule_fares (
     schedule_id        VARCHAR(20)    NOT NULL REFERENCES national_rail_schedules(schedule_id) ON DELETE CASCADE,
     fare_class         fare_class NOT NULL,
@@ -224,7 +224,7 @@ CREATE TABLE national_rail_schedule_stops (
 );
 
 -- =============================================================
--- 6. SCHEDULE OPERATING DAYS（複合 PK）
+-- 6. SCHEDULE OPERATING DAYS（Composite PK）
 -- =============================================================
 
 CREATE TABLE metro_schedule_operates_on (
@@ -282,8 +282,8 @@ CREATE TABLE ticket_type_networks (
 );
 
 -- =============================================================
--- 9. JOURNEYS supertype（解決 polymorphic FK 問題）
--- payments 和 feedback 都指向這裡，不用再猜 BK* 還是 MT*
+-- 9. JOURNEYS supertype (solves polymorphic FK issues)
+-- Payments and feedback both point here, no more guessing between BK* and MT*.
 -- =============================================================
 
 CREATE TABLE journeys (
@@ -300,7 +300,7 @@ CREATE TABLE journeys (
 );
 
 -- =============================================================
--- 10. BOOKINGS（國鐵，繼承 journeys）
+-- 10. BOOKINGS（Railway, inheriting journeys）
 -- =============================================================
 
 CREATE TABLE bookings (
@@ -324,7 +324,7 @@ CREATE TABLE bookings (
 );
 
 -- =============================================================
--- 11. METRO TRIPS（捷運，繼承 journeys）
+-- 11. METRO TRIPS（Metro, inheriting journeys）
 -- =============================================================
 
 CREATE TABLE metro_trips (
@@ -342,7 +342,7 @@ CREATE TABLE metro_trips (
 );
 
 -- =============================================================
--- 12. PAYMENTS（指向 journeys，真正的 FK）
+-- 12. PAYMENTS（Pointing to journeys, FK）
 -- =============================================================
 
 CREATE TABLE payments (
@@ -359,7 +359,7 @@ CREATE TABLE payments (
 );
 
 -- =============================================================
--- 13. FEEDBACK（指向 journeys，真正的 FK）
+-- 13. FEEDBACK（Pointing to journeys, FK）
 -- =============================================================
 
 CREATE TABLE feedback (
@@ -372,11 +372,11 @@ CREATE TABLE feedback (
     UNIQUE (journey_id, user_id)
 );
 
--- 視圖 1: 自動過濾停權帳號
+-- View 1: Automatically filter suspended accounts
 CREATE VIEW active_users AS
     SELECT * FROM users WHERE is_active = TRUE;
 
--- 視圖 2: 即時國鐵空位狀態查詢表
+-- View 2: Real-time National Railway Seat Availability Query Table
 CREATE VIEW seat_availability AS
     SELECT
         s.layout_id,
@@ -398,7 +398,7 @@ CREATE VIEW seat_availability AS
         AND b.seat_id    = s.seat_id
         AND b.schedule_id = sl.schedule_id;
 
--- 視圖 3: 階梯票價預先運算表
+-- View 3: Pre-calculation table of tiered fares
 CREATE VIEW schedule_fare_summary AS
     SELECT
         f.schedule_id,

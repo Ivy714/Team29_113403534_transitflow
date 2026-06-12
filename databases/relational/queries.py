@@ -28,8 +28,8 @@ from psycopg2 import errorcodes
 # Argon2id is preferred over MD5/SHA-* because it has a configurable memory
 # and time cost factor, making brute-force and GPU attacks orders of magnitude
 # slower.  PasswordHasher() uses secure defaults (time_cost=3, memory_cost=64 MB).
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
+#from argon2 import PasswordHasher
+#from argon2.exceptions import VerifyMismatchError
 
 from skeleton.config import PG_DSN, VECTOR_TOP_K, VECTOR_SIMILARITY_THRESHOLD
 from skeleton.password_hash import hash_password, verify_password
@@ -39,7 +39,7 @@ from skeleton.password_hash import hash_password, verify_password
 # each hash() call and embeds it in the PHC-format output string, so two users
 # with identical passwords will always produce completely different stored hashes,
 # defeating pre-computed rainbow-table lookups.
-_ph = PasswordHasher()
+#_ph = PasswordHasher()
 
 
 def _connect():
@@ -811,13 +811,12 @@ def _execute_metro_cancellation(
     Execute cancellation for a metro journey based on the TransitFlow schema.
     Updates the journeys status and marks the corresponding payment as refunded.
     """
-    # 注意：請確保這裡的 PG_DSN 或是 _connect() 和你檔案上半部保持一致
     conn = psycopg2.connect(PG_DSN)
     conn.autocommit = False
 
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # 1. 檢查行程是否存在、是否屬於該使用者，以及目前的狀態
+            # 1. Check if the schedule exists, if it belongs to the user, and its current status
             cur.execute(
                 """
                 SELECT status, amount_usd, ticket_type
@@ -839,8 +838,7 @@ def _execute_metro_cancellation(
             if journey["status"] == "completed":
                 return False, "Cannot cancel a completed metro journey."
 
-            # 2. 處理退款政策 (RF003 / RF004)
-            # 捷運通常是全額退款，若有手續費可在此調整 admin_fee
+            # 2. Handling Refund Policy (RF003 / RF004)
             amount = float(journey["amount_usd"])
             admin_fee = 0.00
             refund_amount = round(amount - admin_fee, 2)
@@ -851,7 +849,7 @@ def _execute_metro_cancellation(
                 else "RF004: Day pass full refund"
             )
 
-            # 3. 更新 Supertype (journeys) 的狀態為 cancelled
+            # 3. Update Supertype (journeys) status to cancelled
             cur.execute(
                 """
                 UPDATE journeys 
@@ -861,7 +859,7 @@ def _execute_metro_cancellation(
                 (journey_id,),
             )
 
-            # 4. 更新 payments 表的狀態，把已付款的紀錄改為 refunded
+            # 4. Update payments table status to refunded
             cur.execute(
                 """
                 UPDATE payments 
@@ -873,15 +871,15 @@ def _execute_metro_cancellation(
 
             conn.commit()
 
-            # 回傳與國鐵退票格式一致的 dict，讓前端好處理
+            # Return a dict consistent with the national rail cancellation format for frontend processing
             return True, {
-                "booking_id": journey_id,  # 前端統一吃 booking_id 欄位
+                "booking_id": journey_id,  # Frontend expects the booking_id field
                 "original_amount_usd": amount,
                 "refund_amount": refund_amount,
                 "refund_amount_usd": refund_amount,
                 "admin_fee_usd": admin_fee,
                 "policy_note": policy_note,
-                "hours_until_departure": 0,  # 捷運不看班次時間，可以直接給 0
+                "hours_until_departure": 0,  # Metro doesn't consider schedule times, so we can directly set it to 0
             }
 
     except Exception as e:

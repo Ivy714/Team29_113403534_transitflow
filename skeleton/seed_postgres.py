@@ -18,7 +18,7 @@ from psycopg2.extras import execute_values
 # argon2-cffi: production-grade Argon2id hashing.
 # Each _ph.hash() call generates a fresh CSPRNG salt automatically and embeds
 # it in the returned PHC-format string — no separate salt column required.
-from argon2 import PasswordHasher
+#from argon2 import PasswordHasher
 # ── resolve paths ─────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
@@ -28,17 +28,17 @@ sys.path.insert(0, PROJECT_DIR)
 from skeleton import config as cfg
 from skeleton.password_hash import hash_password
 
-_ph = PasswordHasher()
+#_ph = PasswordHasher()
 
 
-def _hash(plaintext: str) -> str:
-    """
+"""def _hash(plaintext: str) -> str:
+
     Hash plaintext with Argon2id via argon2-cffi.
     The returned PHC string is self-contained and safe to store directly in
     password_hash / secret_answer_hash — no extra salt column needed.
-    """
-    return _ph.hash(plaintext)
 
+    return _ph.hash(plaintext)
+"""
 
 def load(filename):
     with open(os.path.join(DATA_DIR, filename), encoding="utf-8") as f:
@@ -472,7 +472,7 @@ def seed_national_rail_bookings(cur):
         journey_rows,
     )
 
-# Insert booking rows as children of their corresponding journey rows
+    # Insert booking rows as children of their corresponding journey rows
     bookings = []
     for b in data:
         layout_id = _LAYOUT_LOOKUP.get(b["schedule_id"])
